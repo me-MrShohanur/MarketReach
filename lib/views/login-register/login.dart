@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:marketing/constants/routes.dart';
+import 'package:marketing/services/auth_service.dart';
 import 'package:marketing/widgets/app_text.dart';
 
 class LoginView extends StatefulWidget {
@@ -40,10 +41,49 @@ class _LoginViewState extends State<LoginView> {
   }
 
   Future<void> _submit() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _loading = true);
-      await Future.delayed(const Duration(seconds: 2));
-      setState(() => _loading = false);
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+      // Note: your field is called _email, but API uses "userName" (phone number)
+      await AuthService().login(
+        _email.text.trim(),
+        _password.text.trim(),
+        context,
+      );
+
+      if (!mounted) return;
+
+      // Success → go to home and clear back stack
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        homeRoute, // make sure homeRoute is defined in routes.dart
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      String errorMsg = e.toString();
+      if (errorMsg.contains('Exception:')) {
+        errorMsg = errorMsg.replaceFirst('Exception: ', '');
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errorMsg),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -62,22 +102,17 @@ class _LoginViewState extends State<LoginView> {
                 const SizedBox(height: 56),
 
                 // Logo
-                InkWell(
-                  onTap: () {
-                    // Login to Home Page
-                  },
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: Colors.black,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.trending_up_rounded,
-                      color: Colors.white,
-                      size: 22,
-                    ),
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.trending_up_rounded,
+                    color: Colors.white,
+                    size: 22,
                   ),
                 ),
 
@@ -101,14 +136,16 @@ class _LoginViewState extends State<LoginView> {
 
                 _buildField(
                   controller: _email,
-                  label: 'Email',
+                  label: 'Email or Phone',
                   hint: 'you@company.com',
                   keyboardType: TextInputType.emailAddress,
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Enter your email';
-                    if (!v.contains('@')) return 'Enter a valid email';
-                    return null;
-                  },
+                  // validator: (v) {
+                  //   if (v == null || v.isEmpty)
+                  //     return 'Enter your email or phone';
+                  //   if (!v.contains('@'))
+                  //     return 'Enter a valid email or phone number';
+                  //   return null;
+                  // },
                 ),
                 const SizedBox(height: 14),
                 _buildField(

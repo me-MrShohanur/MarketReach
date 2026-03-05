@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:marketing/constants/routes.dart';
-import 'package:marketing/views/home/home_view.dart';
+import 'package:marketing/views/home/create_order_view.dart';
+import 'package:marketing/views/home/navigator_view.dart';
+import 'package:marketing/views/login-register/app_startup.dart';
 import 'package:marketing/views/login-register/login.dart';
 import 'package:marketing/views/login-register/register.dart';
 
@@ -20,9 +22,13 @@ class MyApp extends StatelessWidget {
       routes: {
         loginRoute: (context) => const LoginView(),
         registerRoute: (context) => const RegisterView(),
+        homeRoute: (context) => const NavigatorView(),
+        createOrderRoute: (context) => const CreateOrderView(),
       },
-      theme: ThemeData(colorScheme: .fromSeed(seedColor: Colors.deepPurple)),
-      home: LoginView(),
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+      ),
+      home: const AuthCheckPage(),
     );
   }
 }
