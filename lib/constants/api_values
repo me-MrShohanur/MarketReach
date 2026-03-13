@@ -2,7 +2,7 @@
 
 
 class BaseUrl {
-  static const String apiBase = 'http://103.125.253.59:9009';
+  static const String apiBase = 'http://103.125.253.59:1122';
   static const String TOKEN = 'Token';
 
 }
@@ -11,5 +11,5 @@ class V {
   static const String v1 = 'v1';
 }
 class EndPoint {
-  static const String login = 'login';
+  static const String login = 'Auth/Login';
 }

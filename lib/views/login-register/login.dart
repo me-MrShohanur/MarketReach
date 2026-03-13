@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:marketing/constants/routes.dart';
 import 'package:marketing/services/auth_service.dart';
+import 'package:marketing/services/provider/current_user.dart';
 import 'package:marketing/widgets/app_text.dart';
 
 class LoginView extends StatefulWidget {
@@ -49,11 +50,15 @@ class _LoginViewState extends State<LoginView> {
 
     try {
       // Note: your field is called _email, but API uses "userName" (phone number)
-      await AuthService().login(
+      final success = await AuthService().login(
         _email.text.trim(),
         _password.text.trim(),
         context,
       );
+      if (success) {
+        await CurrentUser.load(); // ✅ load user into memory
+        // your navigation code here
+      }
 
       if (!mounted) return;
 
@@ -163,11 +168,11 @@ class _LoginViewState extends State<LoginView> {
                       size: 20,
                     ),
                   ),
-                  validator: (v) {
-                    if (v == null || v.isEmpty) return 'Enter your password';
-                    if (v.length < 6) return 'Minimum 6 characters';
-                    return null;
-                  },
+                  // validator: (v) {
+                  //   if (v == null || v.isEmpty) return 'Enter your password';
+                  //   if (v.length < 6) return 'Minimum 6 characters';
+                  //   return null;
+                  // },
                 ),
 
                 const SizedBox(height: 10),

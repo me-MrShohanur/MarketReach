@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:marketing/constants/routes.dart';
-import 'package:marketing/views/home/create_order_view.dart';
+import 'package:marketing/services/provider/current_user.dart';
+import 'package:marketing/views/home/subpages/create_order_view.dart';
 import 'package:marketing/views/home/navigator_view.dart';
 import 'package:marketing/views/login-register/app_startup.dart';
 import 'package:marketing/views/login-register/login.dart';
 import 'package:marketing/views/login-register/register.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized(); // ✅ THIS IS REQUIRED
+  await CurrentUser.load(); // ✅ restores session on app restart
   runApp(const MyApp());
 }
 
