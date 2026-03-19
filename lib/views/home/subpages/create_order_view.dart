@@ -2,9 +2,12 @@ import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:marketing/bloc/customer/customer_provider.dart';
 import 'package:marketing/services/models/products_model.dart';
 import 'package:marketing/services/provider/current_user.dart';
 import 'package:marketing/views/home/subpages/product_list_view.dart';
+import 'package:marketing/views/home/subpages/select_customer.dart';
 
 class CreateOrderView extends StatefulWidget {
   const CreateOrderView({super.key});
@@ -14,40 +17,26 @@ class CreateOrderView extends StatefulWidget {
 }
 
 class _CreateOrderViewState extends State<CreateOrderView> {
+  final List<ProductModel> _cart = [];
   double discount = 0;
   double tax = 0;
-  double subtotal = 0;
   String orderStatus = 'Pending';
-  String paymentStatus = 'Unpaid';
 
-  final List<String> orderStatuses = [
+  static const _orderStatuses = [
     'Pending',
     'Processing',
     'Completed',
     'Cancelled',
   ];
-  final List<String> paymentStatuses = ['Unpaid', 'Paid', 'Partial'];
 
-  final List<Product> _products = const [
-    Product(id: '1', name: 'tap', price: 1400.00, stock: 2000),
-    Product(id: '2', name: 'books vendor', price: 1200.00, stock: 1500),
-  ];
+  double get _subtotal => _cart.fold(0, (s, p) => s + (p.salePrice ?? 0));
+  double get _total => _subtotal - discount + tax;
 
-  double get total => subtotal - discount + tax;
-
-  void _onProductAdded(Product product) {
-    setState(() {
-      subtotal += product.price;
-    });
-  }
-
-  void _openAddProducts() {
-    AddProductsSheet.show(
-      context,
-      products: _products,
-      onProductAdded: _onProductAdded,
-    );
-  }
+  void _openSheet() => AddProductsSheet.show(
+    context,
+    categoryId: 1,
+    onProductAdded: (p) => setState(() => _cart.add(p)),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -58,138 +47,53 @@ class _CreateOrderViewState extends State<CreateOrderView> {
         body: SafeArea(
           child: Column(
             children: [
-              // ── Inline Header (mirrors HomeView) ──────────────────────
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => Navigator.maybePop(context),
-                          child: Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.06),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.arrow_back_ios_new_rounded,
-                              size: 16,
-                              color: Colors.black,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Text(
-                              'New Transaction',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.black45,
-                                letterSpacing: 0.2,
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Create Order',
-                              style: TextStyle(
-                                fontSize: 26,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.black,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    // Logo mark — same as HomeView
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(
-                        Icons.qr_code_scanner_rounded,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
+              _Header(),
               const SizedBox(height: 24),
-
-              // ── Scrollable Body ───────────────────────────────────────
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
                     children: [
-                      _CustomerCard(),
-                      const SizedBox(height: 12),
-                      _EmptyCartSection(onAddProducts: _openAddProducts),
-                      const SizedBox(height: 12),
-                      _OrderSummaryCard(
-                        subtotal: subtotal,
-                        discount: discount,
-                        tax: tax,
-                        total: total,
-                        onDiscountChanged: (val) =>
-                            setState(() => discount = val),
-                        onTaxChanged: (val) => setState(() => tax = val),
+                      BlocProvider(
+                        create: (_) => CustomerBloc()..add(LoadCustomers()),
+                        child: const CustomerDropdownCard(),
                       ),
                       const SizedBox(height: 12),
-                      // ── Status Dropdowns ──────────────────────────────
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _DropdownField(
-                              label: 'Order Status',
-                              value: orderStatus,
-                              items: orderStatuses,
-                              accentColor: const Color(0xFFFFC107),
-                              onChanged: (val) =>
-                                  setState(() => orderStatus = val!),
+                      _cart.isEmpty
+                          ? _EmptyCart(onAdd: _openSheet)
+                          : _CartList(
+                              items: _cart,
+                              onRemove: (i) =>
+                                  setState(() => _cart.removeAt(i)),
+                              onAddMore: _openSheet,
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          // Expanded(
-                          //   child: _DropdownField(
-                          //     label: 'Payment',
-                          //     value: paymentStatus,
-                          //     items: paymentStatuses,
-                          //     accentColor: const Color(0xFF4CAF50),
-                          //     onChanged: (val) =>
-                          //         setState(() => paymentStatus = val!),
-                          //   ),
-                          // ),
-                        ],
+                      const SizedBox(height: 12),
+                      _SummaryCard(
+                        subtotal: _subtotal,
+                        discount: discount,
+                        tax: tax,
+                        total: _total,
+                        onDiscountChanged: (v) => setState(() => discount = v),
+                        onTaxChanged: (v) => setState(() => tax = v),
+                      ),
+                      const SizedBox(height: 12),
+                      _StatusDropdown(
+                        label: 'Order Status',
+                        value: orderStatus,
+                        items: _orderStatuses,
+                        accent: const Color(0xFFFFC107),
+                        onChanged: (v) => setState(() => orderStatus = v!),
                       ),
                       const SizedBox(height: 16),
                     ],
                   ),
                 ),
               ),
-
-              // ── Create Order Button ───────────────────────────────────
-              _CreateOrderButton(onTap: () {}),
+              _BottomButton(
+                label: 'Create Order',
+                icon: Icons.check_rounded,
+                onTap: () {},
+              ),
             ],
           ),
         ),
@@ -198,63 +102,118 @@ class _CreateOrderViewState extends State<CreateOrderView> {
   }
 }
 
-// ─── Customer Card ────────────────────────────────────────────────────────────
+// ─── Header ───────────────────────────────────────────────────────────────────
 
-class _CustomerCard extends StatelessWidget {
+class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {},
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: const Border(
-            left: BorderSide(color: Color(0xFF2196F3), width: 3),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.person_outline_rounded,
-              color: Colors.black45,
-              size: 22,
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Column(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              _IconBtn(
+                icon: Icons.arrow_back_ios_new_rounded,
+                onTap: () => Navigator.maybePop(context),
+              ),
+              const SizedBox(width: 14),
+              const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Customer',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.black45,
-                      letterSpacing: 0.2,
-                    ),
+                    'New Transaction',
+                    style: TextStyle(fontSize: 13, color: Colors.black45),
                   ),
-                  SizedBox(height: 1),
                   Text(
-                    'Walk-in Customer',
+                    'Create Order',
                     style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black,
-                      letterSpacing: -0.2,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
                     ),
                   ),
                 ],
               ),
+            ],
+          ),
+          _BlackBox(
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.qr_code_scanner_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.black26),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Empty Cart ───────────────────────────────────────────────────────────────
+
+class _EmptyCart extends StatelessWidget {
+  final VoidCallback onAdd;
+  const _EmptyCart({required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 36),
+        child: Column(
+          children: [
+            Icon(
+              Icons.shopping_cart_outlined,
+              size: 64,
+              color: Colors.grey.shade300,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Cart is empty',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Add products to create an order',
+              style: TextStyle(fontSize: 13, color: Colors.black45),
+            ),
+            const SizedBox(height: 20),
+            _BlackBox(
+              radius: 12,
+              onTap: onAdd,
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 28, vertical: 13),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add_rounded, color: Colors.white, size: 18),
+                    SizedBox(width: 6),
+                    Text(
+                      'Add Products',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ],
         ),
       ),
@@ -262,82 +221,155 @@ class _CustomerCard extends StatelessWidget {
   }
 }
 
-// ─── Empty Cart Section ───────────────────────────────────────────────────────
+// ─── Cart List ────────────────────────────────────────────────────────────────
 
-class _EmptyCartSection extends StatelessWidget {
-  final VoidCallback onAddProducts;
+class _CartList extends StatelessWidget {
+  final List<ProductModel> items;
+  final ValueChanged<int> onRemove;
+  final VoidCallback onAddMore;
 
-  const _EmptyCartSection({required this.onAddProducts});
+  const _CartList({
+    required this.items,
+    required this.onRemove,
+    required this.onAddMore,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 36),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return _Card(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.shopping_cart_outlined,
+                      size: 18,
+                      color: Colors.black45,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${items.length} item${items.length == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.2,
+                      ),
+                    ),
+                  ],
+                ),
+                _BlackBox(
+                  radius: 9,
+                  onTap: onAddMore,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    child: Row(
+                      children: [
+                        Icon(Icons.add_rounded, color: Colors.white, size: 14),
+                        SizedBox(width: 4),
+                        Text(
+                          'Add More',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFFF0F0F0)),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: items.length,
+            separatorBuilder: (_, _) =>
+                const Divider(height: 1, color: Color(0xFFF5F5F5)),
+            itemBuilder: (_, i) =>
+                _CartTile(product: items[i], onRemove: () => onRemove(i)),
           ),
         ],
       ),
-      child: Column(
+    );
+  }
+}
+
+class _CartTile extends StatelessWidget {
+  final ProductModel product;
+  final VoidCallback onRemove;
+
+  const _CartTile({required this.product, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
         children: [
-          Icon(
-            Icons.shopping_cart_outlined,
-            size: 64,
-            color: Colors.grey.shade300,
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Cart is empty',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: Colors.black,
-              letterSpacing: -0.3,
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF5F5F5),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.inventory_2_outlined,
+              color: Colors.black26,
+              size: 20,
             ),
           ),
-          const SizedBox(height: 4),
-          const Text(
-            'Add products to create an order',
-            style: TextStyle(fontSize: 13, color: Colors.black45),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  product.name,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  product.salePrice != null
+                      ? '৳${product.salePrice!.toStringAsFixed(2)}'
+                      : 'Price N/A',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: product.salePrice != null
+                        ? const Color(0xFF4CAF50)
+                        : Colors.black38,
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 20),
           GestureDetector(
-            onTap: onAddProducts,
+            onTap: onRemove,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 13),
+              width: 30,
+              height: 30,
               decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 12,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+                color: const Color(0xFFFFF0F0),
+                borderRadius: BorderRadius.circular(8),
               ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add_rounded, color: Colors.white, size: 18),
-                  SizedBox(width: 6),
-                  Text(
-                    'Add Products',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      letterSpacing: -0.1,
-                    ),
-                  ),
-                ],
+              child: const Icon(
+                Icons.close_rounded,
+                color: Colors.redAccent,
+                size: 16,
               ),
             ),
           ),
@@ -347,17 +379,13 @@ class _EmptyCartSection extends StatelessWidget {
   }
 }
 
-// ─── Order Summary Card ───────────────────────────────────────────────────────
+// ─── Summary Card ─────────────────────────────────────────────────────────────
 
-class _OrderSummaryCard extends StatelessWidget {
-  final double subtotal;
-  final double discount;
-  final double tax;
-  final double total;
-  final ValueChanged<double> onDiscountChanged;
-  final ValueChanged<double> onTaxChanged;
+class _SummaryCard extends StatelessWidget {
+  final double subtotal, discount, tax, total;
+  final ValueChanged<double> onDiscountChanged, onTaxChanged;
 
-  const _OrderSummaryCard({
+  const _SummaryCard({
     required this.subtotal,
     required this.discount,
     required this.tax,
@@ -368,119 +396,104 @@ class _OrderSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: const Border(
-          left: BorderSide(color: Color(0xFF4CAF50), width: 3),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Order Summary',
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.black45,
-              letterSpacing: 0.2,
+    return _Card(
+      accent: const Color(0xFF4CAF50),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Order Summary',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.black45,
+                letterSpacing: 0.2,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          _SummaryRow(
-            label: 'Subtotal',
-            value: '\$${subtotal.toStringAsFixed(2)}',
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Discount',
-                style: TextStyle(fontSize: 15, color: Colors.black87),
-              ),
-              _CurrencyInput(value: discount, onChanged: onDiscountChanged),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Tax',
-                style: TextStyle(fontSize: 15, color: Colors.black87),
-              ),
-              _CurrencyInput(value: tax, onChanged: onTaxChanged),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1, color: Color(0xFFF0F0F0)),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Total',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.black,
-                  letterSpacing: -0.5,
+            const SizedBox(height: 12),
+            _Row(label: 'Subtotal', value: '৳${subtotal.toStringAsFixed(2)}'),
+            const SizedBox(height: 12),
+            _EditableRow(
+              label: 'Discount',
+              value: discount,
+              onChanged: onDiscountChanged,
+            ),
+            const SizedBox(height: 12),
+            _EditableRow(label: 'Tax', value: tax, onChanged: onTaxChanged),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(height: 1, color: Color(0xFFF0F0F0)),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Total',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-              ),
-              Text(
-                '\$${total.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF4CAF50),
-                  letterSpacing: -0.5,
+                Text(
+                  '৳${total.toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF4CAF50),
+                    letterSpacing: -0.5,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _SummaryRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _SummaryRow({required this.label, required this.value});
+class _Row extends StatelessWidget {
+  final String label, value;
+  const _Row({required this.label, required this.value});
 
   @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(fontSize: 15, color: Colors.black45),
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label, style: const TextStyle(fontSize: 15, color: Colors.black45)),
+      Text(
+        value,
+        style: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+          color: Colors.black87,
         ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: Colors.black87,
-          ),
-        ),
-      ],
-    );
-  }
+      ),
+    ],
+  );
+}
+
+class _EditableRow extends StatelessWidget {
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  const _EditableRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label, style: const TextStyle(fontSize: 15, color: Colors.black87)),
+      _CurrencyInput(value: value, onChanged: onChanged),
+    ],
+  );
 }
 
 // ─── Currency Input ───────────────────────────────────────────────────────────
@@ -488,7 +501,6 @@ class _SummaryRow extends StatelessWidget {
 class _CurrencyInput extends StatefulWidget {
   final double value;
   final ValueChanged<double> onChanged;
-
   const _CurrencyInput({required this.value, required this.onChanged});
 
   @override
@@ -496,20 +508,20 @@ class _CurrencyInput extends StatefulWidget {
 }
 
 class _CurrencyInputState extends State<_CurrencyInput> {
-  late TextEditingController _controller;
+  late final TextEditingController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(
+    _ctrl = TextEditingController(
       text: widget.value == 0 ? '0' : widget.value.toString(),
     );
-    log(name: 'token', CurrentUser.customerID.toString());
+    log(CurrentUser.customerID.toString(), name: 'CurrentUser');
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _ctrl.dispose();
     super.dispose();
   }
 
@@ -525,42 +537,33 @@ class _CurrencyInputState extends State<_CurrencyInput> {
       ),
       child: Row(
         children: [
-          Container(
+          const SizedBox(
             width: 32,
-            alignment: Alignment.center,
-            decoration: const BoxDecoration(
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(9),
-                bottomLeft: Radius.circular(9),
-              ),
-            ),
-            child: const Text(
-              '\$',
-              style: TextStyle(
-                fontSize: 15,
-                color: Colors.black45,
-                fontWeight: FontWeight.w600,
+            child: Center(
+              child: Text(
+                '৳',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.black45,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
           ),
           Expanded(
             child: TextField(
-              controller: _controller,
+              controller: _ctrl,
               keyboardType: const TextInputType.numberWithOptions(
                 decimal: true,
               ),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.black,
-              ),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
               decoration: const InputDecoration(
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.zero,
                 isDense: true,
               ),
-              onChanged: (val) => widget.onChanged(double.tryParse(val) ?? 0),
+              onChanged: (v) => widget.onChanged(double.tryParse(v) ?? 0),
             ),
           ),
         ],
@@ -569,85 +572,81 @@ class _CurrencyInputState extends State<_CurrencyInput> {
   }
 }
 
-// ─── Dropdown Field ───────────────────────────────────────────────────────────
+// ─── Status Dropdown ──────────────────────────────────────────────────────────
 
-class _DropdownField extends StatelessWidget {
-  final String label;
-  final String value;
+class _StatusDropdown extends StatelessWidget {
+  final String label, value;
   final List<String> items;
-  final Color accentColor;
+  final Color accent;
   final ValueChanged<String?> onChanged;
 
-  const _DropdownField({
+  const _StatusDropdown({
     required this.label,
     required this.value,
     required this.items,
-    required this.accentColor,
+    required this.accent,
     required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border(left: BorderSide(color: accentColor, width: 3)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 11,
-              color: Colors.black45,
-              letterSpacing: 0.2,
-            ),
-          ),
-          const SizedBox(height: 2),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: value,
-              isDense: true,
-              isExpanded: true,
-              icon: const Icon(
-                Icons.keyboard_arrow_down_rounded,
-                size: 18,
-                color: Colors.black45,
-              ),
+    return _Card(
+      accent: accent,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
               style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: Colors.black,
-                letterSpacing: -0.2,
+                fontSize: 11,
+                color: Colors.black45,
+                letterSpacing: 0.2,
               ),
-              items: items
-                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                  .toList(),
-              onChanged: onChanged,
             ),
-          ),
-        ],
+            const SizedBox(height: 2),
+            DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: value,
+                isDense: true,
+                isExpanded: true,
+                icon: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: Colors.black45,
+                ),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black,
+                  letterSpacing: -0.2,
+                ),
+                items: items
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .toList(),
+                onChanged: onChanged,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ─── Create Order Button ──────────────────────────────────────────────────────
+// ─── Bottom Button ────────────────────────────────────────────────────────────
 
-class _CreateOrderButton extends StatelessWidget {
+class _BottomButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
   final VoidCallback onTap;
 
-  const _CreateOrderButton({required this.onTap});
+  const _BottomButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -661,37 +660,122 @@ class _CreateOrderButton extends StatelessWidget {
       ),
       child: GestureDetector(
         onTap: onTap,
-        child: Container(
-          width: double.infinity,
-          height: 52,
-          decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.check_rounded, color: Colors.white, size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Create Order',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  letterSpacing: -0.1,
+        child: _BlackBox(
+          radius: 16,
+          child: SizedBox(
+            width: double.infinity,
+            height: 52,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    letterSpacing: -0.1,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─── Shared Primitives ────────────────────────────────────────────────────────
+
+/// White card with optional left accent border and shadow
+class _Card extends StatelessWidget {
+  final Widget child;
+  final Color? accent;
+
+  const _Card({required this.child, this.accent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: accent != null
+            ? Border(left: BorderSide(color: accent!, width: 3))
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+/// Black rounded container — used for buttons/badges
+class _BlackBox extends StatelessWidget {
+  final Widget child;
+  final double radius;
+  final VoidCallback? onTap;
+
+  const _BlackBox({required this.child, this.radius = 12, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(radius),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+/// Small icon button (back button style)
+class _IconBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _IconBtn({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Icon(icon, size: 16, color: Colors.black),
       ),
     );
   }

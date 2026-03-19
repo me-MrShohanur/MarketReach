@@ -1,384 +1,464 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:marketing/bloc/customer/customer_provider.dart';
 import 'package:marketing/services/models/customer.dart';
-import 'package:marketing/services/provider/customer_service.dart';
+import 'package:marketing/services/models/products_model.dart';
 
-class SelectCustomerSheet extends StatefulWidget {
-  final ValueChanged<CustomerModel?> onCustomerSelected;
+// ─── Customer Dropdown Card ───────────────────────────────────────────────────
+// Drop-in replacement for the old _CustomerCard widget in CreateOrderView.
+// Wrap your CreateOrderView (or a parent) with BlocProvider<CustomerBloc>.
 
-  const SelectCustomerSheet({super.key, required this.onCustomerSelected});
-
-  static Future<void> show(
-    BuildContext context, {
-    required ValueChanged<CustomerModel?> onCustomerSelected,
-  }) {
-    return showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) =>
-          SelectCustomerSheet(onCustomerSelected: onCustomerSelected),
-    );
-  }
+class CustomerDropdownCard extends StatefulWidget {
+  const CustomerDropdownCard({super.key});
 
   @override
-  State<SelectCustomerSheet> createState() => _SelectCustomerSheetState();
+  State<CustomerDropdownCard> createState() => _CustomerDropdownCardState();
 }
 
-class _SelectCustomerSheetState extends State<SelectCustomerSheet> {
-  final CustomerService _service = CustomerService();
-  final TextEditingController _searchController = TextEditingController();
+class _CustomerDropdownCardState extends State<CustomerDropdownCard> {
+  final LayerLink _layerLink = LayerLink();
+  OverlayEntry? _overlayEntry;
+  bool _isOpen = false;
 
-  List<CustomerModel> _allCustomers = [];
-  List<CustomerModel> _filtered = [];
-  bool _isLoading = true;
-  String? _error;
+  // ── Overlay helpers ────────────────────────────────────────────────────────
 
-  @override
-  void initState() {
-    super.initState();
-    _loadCustomers();
-    _searchController.addListener(_onSearch);
+  void _openDropdown(
+    BuildContext context,
+    List<CustomerModel> customers,
+    CustomerModel? selected,
+  ) {
+    _closeDropdown();
+
+    final renderBox = context.findRenderObject() as RenderBox;
+    final size = renderBox.size;
+
+    _overlayEntry = OverlayEntry(
+      builder: (_) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: _closeDropdown,
+        child: Stack(
+          children: [
+            CompositedTransformFollower(
+              link: _layerLink,
+              showWhenUnlinked: false,
+              offset: Offset(0, size.height + 6),
+              child: Material(
+                color: Colors.transparent,
+                child: _DropdownOverlay(
+                  customers: customers,
+                  selected: selected,
+                  onSelect: (customer) {
+                    context.read<CustomerBloc>().add(SelectCustomer(customer));
+                    _closeDropdown();
+                  },
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
+    setState(() => _isOpen = true);
+  }
+
+  void _closeDropdown() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+    if (mounted) setState(() => _isOpen = false);
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _closeDropdown();
     super.dispose();
   }
 
-  Future<void> _loadCustomers() async {
-    try {
-      final customers = await _service.fetchCustomers();
-      setState(() {
-        _allCustomers = customers;
-        _filtered = customers;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
+  // ── Build ──────────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<CustomerBloc, CustomerState>(
+      builder: (context, state) {
+        if (state is CustomerLoading) {
+          return _buildShell(child: const _LoadingRow());
+        }
+
+        if (state is CustomerError) {
+          return _buildShell(child: _ErrorRow(message: state.message));
+        }
+
+        if (state is CustomerLoaded) {
+          return CompositedTransformTarget(
+            link: _layerLink,
+            child: GestureDetector(
+              onTap: () => state.customers.isEmpty
+                  ? null
+                  : _isOpen
+                  ? _closeDropdown()
+                  : _openDropdown(
+                      context,
+                      state.customers,
+                      state.selectedCustomer,
+                    ),
+              child: _buildShell(
+                isOpen: _isOpen,
+                child: _SelectedRow(
+                  selected: state.selectedCustomer,
+                  isOpen: _isOpen,
+                ),
+              ),
+            ),
+          );
+        }
+
+        // CustomerInitial — not yet triggered
+        return _buildShell(child: const _PlaceholderRow());
+      },
+    );
+  }
+
+  Widget _buildShell({required Widget child, bool isOpen = false}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border(
+          left: const BorderSide(color: Color(0xFF2196F3), width: 3),
+          bottom: isOpen
+              ? const BorderSide(color: Color(0xFF2196F3), width: 1)
+              : BorderSide.none,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+}
+
+// ── Row sub-widgets ────────────────────────────────────────────────────────────
+
+class _SelectedRow extends StatelessWidget {
+  final CustomerModel? selected;
+  final bool isOpen;
+
+  const _SelectedRow({this.selected, required this.isOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(
+          Icons.person_outline_rounded,
+          color: Colors.black45,
+          size: 22,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Customer',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.black45,
+                  letterSpacing: 0.2,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                selected?.aliasName ?? 'Select a customer',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: selected != null ? Colors.black : Colors.black38,
+                  letterSpacing: -0.2,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        AnimatedRotation(
+          turns: isOpen ? 0.5 : 0,
+          duration: const Duration(milliseconds: 200),
+          child: const Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: Colors.black26,
+            size: 22,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PlaceholderRow extends StatelessWidget {
+  const _PlaceholderRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: const [
+        Icon(Icons.person_outline_rounded, color: Colors.black45, size: 22),
+        SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            'Walk-in Customer',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.black,
+              letterSpacing: -0.2,
+            ),
+          ),
+        ),
+        Icon(Icons.chevron_right_rounded, color: Colors.black26),
+      ],
+    );
+  }
+}
+
+class _LoadingRow extends StatelessWidget {
+  const _LoadingRow();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: const [
+        Icon(Icons.person_outline_rounded, color: Colors.black45, size: 22),
+        SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            'Loading customers…',
+            style: TextStyle(fontSize: 14, color: Colors.black38),
+          ),
+        ),
+        SizedBox(
+          width: 16,
+          height: 16,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: Color(0xFF2196F3),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ErrorRow extends StatelessWidget {
+  final String message;
+  const _ErrorRow({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(
+          Icons.error_outline_rounded,
+          color: Colors.redAccent,
+          size: 22,
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            'Failed to load customers',
+            style: const TextStyle(fontSize: 14, color: Colors.redAccent),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─── Dropdown Overlay Panel ───────────────────────────────────────────────────
+
+class _DropdownOverlay extends StatefulWidget {
+  final List<CustomerModel> customers;
+  final CustomerModel? selected;
+  final ValueChanged<CustomerModel> onSelect;
+
+  const _DropdownOverlay({
+    required this.customers,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  @override
+  State<_DropdownOverlay> createState() => _DropdownOverlayState();
+}
+
+class _DropdownOverlayState extends State<_DropdownOverlay> {
+  late List<CustomerModel> _filtered;
+  final TextEditingController _search = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _filtered = widget.customers;
+    _search.addListener(_onSearch);
   }
 
   void _onSearch() {
-    final query = _searchController.text.toLowerCase();
+    final q = _search.text.toLowerCase();
     setState(() {
-      _filtered = _allCustomers
-          .where((c) => (c.aliasName ?? '').toLowerCase().contains(query))
-          .toList();
+      _filtered = q.isEmpty
+          ? widget.customers
+          : widget.customers
+                .where((c) => c.aliasName.toLowerCase().contains(q))
+                .toList();
     });
   }
 
-  void _selectCustomer(CustomerModel? customer) {
-    if (customer != null) {
-      debugPrint('accountId: ${customer.accountId}');
-    }
-    widget.onCustomerSelected(customer);
-    Navigator.pop(context);
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final screenWidth = MediaQuery.of(context).size.width;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      width: screenWidth - 48, // matches 24px horizontal padding each side
+      constraints: const BoxConstraints(maxHeight: 300),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F5F5),
-        borderRadius: BorderRadius.circular(24),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE8E8E8)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.10),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-      // Cap height at 80% of screen
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.80,
-      ),
-      padding: EdgeInsets.only(bottom: bottomInset),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Handle ──────────────────────────────────────────────────
-          const SizedBox(height: 12),
-          Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.black12,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // ── Title ────────────────────────────────────────────────────
+          // ── Search bar ──────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Select Customer',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black,
-                    letterSpacing: -0.4,
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () => Navigator.pop(context),
-                  child: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.06),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.close_rounded,
-                      size: 16,
-                      color: Colors.black54,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          // ── Search Bar ───────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
             child: Container(
-              height: 44,
+              height: 38,
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                color: const Color(0xFFF5F5F5),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE0E0E0)),
+              ),
+              child: Row(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10),
+                    child: Icon(
+                      Icons.search_rounded,
+                      size: 18,
+                      color: Colors.black38,
+                    ),
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: _search,
+                      autofocus: true,
+                      style: const TextStyle(fontSize: 14, color: Colors.black),
+                      decoration: const InputDecoration(
+                        hintText: 'Search customer…',
+                        hintStyle: TextStyle(
+                          fontSize: 14,
+                          color: Colors.black38,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                      ),
+                    ),
                   ),
                 ],
               ),
-              child: TextField(
-                controller: _searchController,
-                style: const TextStyle(fontSize: 14, color: Colors.black),
-                decoration: const InputDecoration(
-                  hintText: 'Search by name...',
-                  hintStyle: TextStyle(fontSize: 14, color: Colors.black38),
-                  prefixIcon: Icon(
-                    Icons.search_rounded,
-                    size: 20,
-                    color: Colors.black38,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(vertical: 12),
-                ),
-              ),
             ),
           ),
 
-          const SizedBox(height: 12),
+          const Divider(height: 1, color: Color(0xFFF0F0F0)),
 
-          // ── List ─────────────────────────────────────────────────────
+          // ── List ────────────────────────────────────────────────────
           Flexible(
-            child: _isLoading
-                ? const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(40),
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.black,
-                      ),
-                    ),
-                  )
-                : _error != null
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(40),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.wifi_off_rounded,
-                            size: 40,
-                            color: Colors.black26,
-                          ),
-                          const SizedBox(height: 10),
-                          const Text(
-                            'Failed to load customers',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _error!,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: Colors.black45,
-                            ),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 16),
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _isLoading = true;
-                                _error = null;
-                              });
-                              _loadCustomers();
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 20,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.black,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: const Text(
-                                'Retry',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
+            child: _filtered.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text(
+                      'No customers found',
+                      style: TextStyle(fontSize: 14, color: Colors.black38),
                     ),
                   )
                 : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                    itemCount: _filtered.length + 1, // +1 for Walk-in
-                    separatorBuilder: (_, _) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      // Walk-in Customer pinned at top
-                      if (index == 0) {
-                        return _CustomerTile(
-                          name: 'Walk-in Customer',
-                          subtitle: 'No account linked',
-                          isWalkIn: true,
-                          onTap: () => _selectCustomer(null),
-                        );
-                      }
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    shrinkWrap: true,
+                    itemCount: _filtered.length,
+                    separatorBuilder: (_, _) => const Divider(
+                      height: 1,
+                      indent: 16,
+                      endIndent: 16,
+                      color: Color(0xFFF5F5F5),
+                    ),
+                    itemBuilder: (_, i) {
+                      final c = _filtered[i];
+                      final isSelected =
+                          widget.selected?.accountId == c.accountId;
 
-                      final customer = _filtered[index - 1];
-                      return _CustomerTile(
-                        name: customer.aliasName ?? '—',
-                        subtitle: 'ID: ${customer.accountId ?? '—'}',
-                        isWalkIn: false,
-                        onTap: () => _selectCustomer(customer),
+                      return GestureDetector(
+                        onTap: () => widget.onSelect(c),
+                        behavior: HitTestBehavior.opaque,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          color: isSelected
+                              ? const Color(0xFFE3F2FD)
+                              : Colors.transparent,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  c.aliasName,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.w400,
+                                    color: isSelected
+                                        ? const Color(0xFF1565C0)
+                                        : Colors.black87,
+                                    letterSpacing: -0.1,
+                                  ),
+                                ),
+                              ),
+                              if (isSelected)
+                                const Icon(
+                                  Icons.check_rounded,
+                                  size: 16,
+                                  color: Color(0xFF2196F3),
+                                ),
+                            ],
+                          ),
+                        ),
                       );
                     },
                   ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// ─── Customer Tile ────────────────────────────────────────────────────────────
-
-class _CustomerTile extends StatelessWidget {
-  final String name;
-  final String subtitle;
-  final bool isWalkIn;
-  final VoidCallback onTap;
-
-  const _CustomerTile({
-    required this.name,
-    required this.subtitle,
-    required this.isWalkIn,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(14),
-          border: isWalkIn
-              ? const Border(
-                  left: BorderSide(color: Color(0xFF2196F3), width: 3),
-                )
-              : null,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: isWalkIn
-                    ? const Color(0xFF2196F3).withValues(alpha: 0.08)
-                    : const Color(0xFFF5F5F5),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                isWalkIn
-                    ? Icons.person_outline_rounded
-                    : Icons.account_circle_outlined,
-                size: 18,
-                color: isWalkIn ? const Color(0xFF2196F3) : Colors.black45,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(fontSize: 11, color: Colors.black38),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: Colors.black26,
-            ),
-          ],
-        ),
       ),
     );
   }

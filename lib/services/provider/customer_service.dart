@@ -1,24 +1,44 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'package:http/http.dart' as http;
+import 'package:marketing/constants/api_values';
 import 'package:marketing/services/models/customer.dart';
+import 'package:marketing/services/provider/current_user.dart';
 
 class CustomerService {
-  static const String _baseUrl =
-      'http://103.125.253.59:1122/api/v1/Order/GetCustomer';
+  Future<List<CustomerModel>> getCustomers() async {
+    final uri =
+        Uri.parse(
+          '${BaseUrl.apiBase}/api/${V.v1}/${EndPoint.getCustomer}',
+        ).replace(
+          queryParameters: {
+            'companyId': CurrentUser.compId.toString(),
+            'type': CurrentUser.userTypeId.toString(),
+            'empId': CurrentUser.empId.toString(),
+            'userId': CurrentUser.userId.toString(),
+            'customerId': CurrentUser.customerID.toString(),
+          },
+        );
 
-  Future<List<CustomerModel>> fetchCustomers() async {
-    final uri = Uri.parse(
-      '$_baseUrl?companyId=122&type=2&empId=5892&userId=3631&customerId=0',
+    final response = await http.get(
+      uri,
+      headers: {
+        'accept': '*/*',
+        'Authorization': 'Bearer ${CurrentUser.token}',
+      },
     );
 
-    final response = await http.get(uri);
-
     if (response.statusCode == 200) {
-      final List<dynamic> data = json.decode(response.body);
-      return data
-          .map((item) => CustomerModel.fromJson(item as Map<String, dynamic>))
+      log(uri.toString(), name: EndPoint.getCustomer); // ✅ fixed
+      final List<dynamic> jsonList = json.decode(response.body);
+      return jsonList
+          .map((e) => CustomerModel.fromJson(e as Map<String, dynamic>))
           .toList();
     } else {
+      log(
+        'Status: ${response.statusCode} | Body: ${response.body}',
+        name: EndPoint.getCustomer,
+      );
       throw Exception(
         'Failed to load customers. Status: ${response.statusCode}',
       );
