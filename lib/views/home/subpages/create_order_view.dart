@@ -22,6 +22,9 @@ class _CreateOrderViewState extends State<CreateOrderView> {
   double tax = 0;
   String orderStatus = 'Pending';
 
+  bool _customerSelected = false;
+  int? _selectedPartyId; // ✅ stores real accountId
+
   static const _orderStatuses = [
     'Pending',
     'Processing',
@@ -32,11 +35,18 @@ class _CreateOrderViewState extends State<CreateOrderView> {
   double get _subtotal => _cart.fold(0, (s, p) => s + (p.salePrice ?? 0));
   double get _total => _subtotal - discount + tax;
 
-  void _openSheet() => AddProductsSheet.show(
-    context,
-    categoryId: 1,
-    onProductAdded: (p) => setState(() => _cart.add(p)),
-  );
+  bool get _canAddProducts => _customerSelected;
+  bool get _canCreateOrder => _customerSelected && _cart.isNotEmpty;
+
+  void _openSheet() {
+    if (!_canAddProducts) return;
+    AddProductsSheet.show(
+      context,
+      partyId: _selectedPartyId ?? 0, // ✅ real accountId passed here
+      categoryId: 1,
+      onProductAdded: (p) => setState(() => _cart.add(p)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -56,17 +66,49 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                     children: [
                       BlocProvider(
                         create: (_) => CustomerBloc()..add(LoadCustomers()),
-                        child: const CustomerDropdownCard(),
+                        child: BlocConsumer<CustomerBloc, CustomerState>(
+                          listener: (context, state) {
+                            if (state is CustomerLoaded &&
+                                state.selectedCustomer != null) {
+                              final selected = state.selectedCustomer!;
+                              setState(() {
+                                _customerSelected = true;
+                                _selectedPartyId =
+                                    selected.accountId; // ✅ store
+                              });
+                              log(
+                                'Customer selected: '
+                                'id=${selected.accountId} | '
+                                'name=${selected.aliasName}',
+                                name: 'CustomerDropdown',
+                              );
+                            } else if (state is CustomerLoaded &&
+                                state.selectedCustomer == null) {
+                              setState(() {
+                                _customerSelected = false;
+                                _selectedPartyId = null; // ✅ reset
+                              });
+                            }
+                          },
+                          builder: (context, state) =>
+                              const CustomerDropdownCard(),
+                        ),
                       ),
+
                       const SizedBox(height: 12),
+
                       _cart.isEmpty
-                          ? _EmptyCart(onAdd: _openSheet)
+                          ? _EmptyCart(
+                              onAdd: _openSheet,
+                              enabled: _canAddProducts,
+                            )
                           : _CartList(
                               items: _cart,
                               onRemove: (i) =>
                                   setState(() => _cart.removeAt(i)),
                               onAddMore: _openSheet,
                             ),
+
                       const SizedBox(height: 12),
                       _SummaryCard(
                         subtotal: _subtotal,
@@ -92,6 +134,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
               _BottomButton(
                 label: 'Create Order',
                 icon: Icons.check_rounded,
+                enabled: _canCreateOrder,
                 onTap: () {},
               ),
             ],
@@ -138,19 +181,17 @@ class _Header extends StatelessWidget {
               ),
             ],
           ),
-          _BlackBox(
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.qr_code_scanner_rounded,
-                color: Colors.white,
-                size: 22,
-              ),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.qr_code_scanner_rounded,
+              color: Colors.white,
+              size: 22,
             ),
           ),
         ],
@@ -163,7 +204,9 @@ class _Header extends StatelessWidget {
 
 class _EmptyCart extends StatelessWidget {
   final VoidCallback onAdd;
-  const _EmptyCart({required this.onAdd});
+  final bool enabled;
+
+  const _EmptyCart({required this.onAdd, this.enabled = true});
 
   @override
   Widget build(BuildContext context) {
@@ -187,17 +230,39 @@ class _EmptyCart extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Add products to create an order',
-              style: TextStyle(fontSize: 13, color: Colors.black45),
+            Text(
+              enabled
+                  ? 'Add products to create an order'
+                  : 'Select a customer first',
+              style: TextStyle(
+                fontSize: 13,
+                color: enabled ? Colors.black45 : Colors.orangeAccent,
+              ),
             ),
             const SizedBox(height: 20),
-            _BlackBox(
-              radius: 12,
-              onTap: onAdd,
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 28, vertical: 13),
-                child: Row(
+            GestureDetector(
+              onTap: enabled ? onAdd : null,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 28,
+                  vertical: 13,
+                ),
+                decoration: BoxDecoration(
+                  color: enabled ? Colors.black : Colors.black26,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: enabled
+                      ? const [
+                          BoxShadow(
+                            color: Color(0x26000000),
+                            blurRadius: 12,
+                            offset: Offset(0, 6),
+                          ),
+                        ]
+                      : [],
+                ),
+                child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.add_rounded, color: Colors.white, size: 18),
@@ -262,12 +327,18 @@ class _CartList extends StatelessWidget {
                     ),
                   ],
                 ),
-                _BlackBox(
-                  radius: 9,
+                GestureDetector(
                   onTap: onAddMore,
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                    child: Row(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: const Row(
                       children: [
                         Icon(Icons.add_rounded, color: Colors.white, size: 14),
                         SizedBox(width: 4),
@@ -641,11 +712,13 @@ class _BottomButton extends StatelessWidget {
   final String label;
   final IconData icon;
   final VoidCallback onTap;
+  final bool enabled;
 
   const _BottomButton({
     required this.label,
     required this.icon,
     required this.onTap,
+    this.enabled = true,
   });
 
   @override
@@ -659,28 +732,40 @@ class _BottomButton extends StatelessWidget {
         12 + MediaQuery.of(context).padding.bottom,
       ),
       child: GestureDetector(
-        onTap: onTap,
-        child: _BlackBox(
-          radius: 16,
-          child: SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                    letterSpacing: -0.1,
-                  ),
+        onTap: enabled ? onTap : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          width: double.infinity,
+          height: 52,
+          decoration: BoxDecoration(
+            color: enabled ? Colors.black : Colors.black26,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: enabled
+                ? const [
+                    BoxShadow(
+                      color: Color(0x26000000),
+                      blurRadius: 12,
+                      offset: Offset(0, 6),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  letterSpacing: -0.1,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -690,7 +775,6 @@ class _BottomButton extends StatelessWidget {
 
 // ─── Shared Primitives ────────────────────────────────────────────────────────
 
-/// White card with optional left accent border and shadow
 class _Card extends StatelessWidget {
   final Widget child;
   final Color? accent;
@@ -698,29 +782,26 @@ class _Card extends StatelessWidget {
   const _Card({required this.child, this.accent});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: accent != null
-            ? Border(left: BorderSide(color: accent!, width: 3))
-            : null,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: accent != null
+          ? Border(left: BorderSide(color: accent!, width: 3))
+          : null,
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x0D000000),
+          blurRadius: 10,
+          offset: Offset(0, 4),
+        ),
+      ],
+    ),
+    child: child,
+  );
 }
 
-/// Black rounded container — used for buttons/badges
 class _BlackBox extends StatelessWidget {
   final Widget child;
   final double radius;
@@ -729,28 +810,25 @@ class _BlackBox extends StatelessWidget {
   const _BlackBox({required this.child, this.radius = 12, this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(radius),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.15),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: child,
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      decoration: BoxDecoration(
+        color: Colors.black,
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x26000000),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+          ),
+        ],
       ),
-    );
-  }
+      child: child,
+    ),
+  );
 }
 
-/// Small icon button (back button style)
 class _IconBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
@@ -758,25 +836,23 @@ class _IconBtn extends StatelessWidget {
   const _IconBtn({required this.icon, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Icon(icon, size: 16, color: Colors.black),
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0F000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
-    );
-  }
+      child: Icon(icon, size: 16, color: Colors.black),
+    ),
+  );
 }

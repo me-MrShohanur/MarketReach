@@ -39,29 +39,35 @@ class _BlackBtn extends StatelessWidget {
   final VoidCallback onTap;
   final double radius;
   final EdgeInsets padding;
+  final bool enabled;
 
   const _BlackBtn({
     required this.label,
     required this.onTap,
     this.radius = 10,
     this.padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
+    onTap: enabled ? onTap : null,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.black,
+        color: enabled ? Colors.black : Colors.black26,
         borderRadius: BorderRadius.circular(radius),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          ),
-        ],
+        boxShadow: enabled
+            ? const [
+                BoxShadow(
+                  color: Color(0x26000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 4),
+                ),
+              ]
+            : [],
       ),
       child: Text(
         label,
@@ -155,6 +161,7 @@ class AddProductsSheet extends StatelessWidget {
 
   static void show(
     BuildContext context, {
+    required int partyId, // ✅ real accountId from selected customer
     required int categoryId,
     required ValueChanged<ProductModel> onProductAdded,
   }) {
@@ -163,8 +170,13 @@ class AddProductsSheet extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => BlocProvider(
-        create: (_) =>
-            ProductBloc()..add(FetchProducts(categoryId: categoryId)),
+        create: (_) => ProductBloc()
+          ..add(
+            FetchProducts(
+              getPartyId: partyId, // ✅ passed to API
+              categoryId: categoryId,
+            ),
+          ),
         child: AddProductsSheet(
           categoryId: categoryId,
           onProductAdded: onProductAdded,
@@ -300,7 +312,7 @@ class _SheetBodyState extends State<_SheetBody> {
                 return _ErrorView(
                   message: state.message,
                   onRetry: () => context.read<ProductBloc>().add(
-                    FetchProducts(categoryId: 1),
+                    FetchProducts(getPartyId: 0, categoryId: 1),
                   ),
                 );
               }
@@ -536,38 +548,29 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
   final _discountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
 
-  // ✅ All getters read from their controllers
   double get _qty => double.tryParse(_qtyCtrl.text) ?? 0;
   double get _rate => double.tryParse(_rateCtrl.text) ?? 0;
   double get _disc => double.tryParse(_discountCtrl.text) ?? 0;
   double get _net => (_qty * _rate) - _disc;
 
-  // ✅ ValueNotifier — only net amount rebuilds, not whole form
   late final ValueNotifier<double> _netNotifier;
+  late final ValueNotifier<bool> _saveEnabledNotifier;
 
   @override
   void initState() {
     super.initState();
 
-    //PRE-Defined thevalue from API
-
-    // Left
-    // _leftCtrl.text = widget.product.compId.toString();
-    // // Right
-    // _rightCtrl.text = widget.product.compId.toString();
-    // Quantity
-    // _qtyCtrl.text = widget.product.depoDiscount.toStringAsFixed(2);
-    // Rate
-    _rateCtrl.text = widget.product.discountRate.toStringAsFixed(2);
-    // Discount
+    _leftCtrl.text = widget.product.compId.toString();
+    _rightCtrl.text = widget.product.compId.toString();
+    _qtyCtrl.text = widget.product.depoDiscount.toStringAsFixed(2);
+    _rateCtrl.text = (widget.product.salePrice ?? 0).toStringAsFixed(2);
     _discountCtrl.text = widget.product.discountRate.toStringAsFixed(2);
 
-    //Init notifier AFTER all pre-fills so first net value is correct
     _netNotifier = ValueNotifier(_net);
+    _saveEnabledNotifier = ValueNotifier(_qty > 0);
 
-    //Listen for changes to update net amount
     for (final c in [_qtyCtrl, _rateCtrl, _discountCtrl]) {
-      c.addListener(_updateNet);
+      c.addListener(_onFieldChanged);
     }
 
     log(
@@ -579,7 +582,10 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
     );
   }
 
-  void _updateNet() => _netNotifier.value = _net;
+  void _onFieldChanged() {
+    _netNotifier.value = _net;
+    _saveEnabledNotifier.value = _qty > 0;
+  }
 
   @override
   void dispose() {
@@ -594,6 +600,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
       c.dispose();
     }
     _netNotifier.dispose();
+    _saveEnabledNotifier.dispose();
     super.dispose();
   }
 
@@ -747,7 +754,6 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
     ),
   );
 
-  // ✅ Only this widget rebuilds when qty/rate/discount changes
   Widget _netBox() => _Card(
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
@@ -811,13 +817,17 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
         ),
         Padding(
           padding: const EdgeInsets.only(right: 8),
-          child: _BlackBtn(
-            label: 'Save',
-            onTap: () {
-              widget.onSave();
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
+          child: ValueListenableBuilder<bool>(
+            valueListenable: _saveEnabledNotifier,
+            builder: (_, enabled, _) => _BlackBtn(
+              label: 'Save',
+              enabled: enabled,
+              onTap: () {
+                widget.onSave();
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+            ),
           ),
         ),
       ],

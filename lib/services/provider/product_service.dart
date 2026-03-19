@@ -6,14 +6,17 @@ import 'package:marketing/services/models/products_model.dart';
 import 'package:marketing/services/provider/current_user.dart';
 
 class ProductService {
-  Future<List<ProductModel>> getProducts({required int categoryId}) async {
+  Future<List<ProductModel>> getProducts({
+    required int getPartyId,
+    required int categoryId,
+  }) async {
     final uri =
         Uri.parse(
           '${BaseUrl.apiBase}/api/${V.v1}/${EndPoint.getProducts}',
         ).replace(
           queryParameters: {
             'companyId': CurrentUser.compId.toString(),
-            'partyId': CurrentUser.customerID.toString(),
+            'partyId': getPartyId.toString(),
             'categoryId': categoryId.toString(),
           },
         );

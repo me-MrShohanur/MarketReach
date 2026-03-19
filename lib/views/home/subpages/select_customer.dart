@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:marketing/bloc/customer/customer_provider.dart';
 import 'package:marketing/services/models/customer.dart';
-import 'package:marketing/services/models/products_model.dart';
 
 // ─── Customer Dropdown Card ───────────────────────────────────────────────────
 // Drop-in replacement for the old _CustomerCard widget in CreateOrderView.

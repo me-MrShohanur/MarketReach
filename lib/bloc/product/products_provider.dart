@@ -9,7 +9,8 @@ abstract class ProductEvent {}
 
 class FetchProducts extends ProductEvent {
   final int categoryId;
-  FetchProducts({required this.categoryId});
+  final int getPartyId;
+  FetchProducts({required this.categoryId, required this.getPartyId});
 }
 
 // ── States ────────────────────────────────────────────────────────────────────
@@ -40,7 +41,10 @@ class ProductBloc extends Bloc<ProductEvent, ProductState> {
   Future<void> _onFetch(FetchProducts event, Emitter<ProductState> emit) async {
     emit(ProductLoading());
     try {
-      final products = await _service.getProducts(categoryId: event.categoryId);
+      final products = await _service.getProducts(
+        getPartyId: event.getPartyId,
+        categoryId: event.categoryId,
+      );
       emit(ProductLoaded(products));
     } catch (e) {
       emit(ProductError(e.toString()));
