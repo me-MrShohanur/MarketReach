@@ -161,7 +161,7 @@ class AddProductsSheet extends StatelessWidget {
 
   static void show(
     BuildContext context, {
-    required int partyId, // ✅ real accountId from selected customer
+    required int partyId,
     required int categoryId,
     required ValueChanged<ProductModel> onProductAdded,
   }) {
@@ -170,13 +170,9 @@ class AddProductsSheet extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => BlocProvider(
-        create: (_) => ProductBloc()
-          ..add(
-            FetchProducts(
-              getPartyId: partyId, // ✅ passed to API
-              categoryId: categoryId,
-            ),
-          ),
+        create: (_) =>
+            ProductBloc()
+              ..add(FetchProducts(getPartyId: partyId, categoryId: categoryId)),
         child: AddProductsSheet(
           categoryId: categoryId,
           onProductAdded: onProductAdded,
@@ -260,8 +256,6 @@ class _SheetBodyState extends State<_SheetBody> {
           ),
         ),
         const SizedBox(height: 20),
-
-        // Search
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: _Card(
@@ -290,9 +284,7 @@ class _SheetBodyState extends State<_SheetBody> {
             ),
           ),
         ),
-
         const SizedBox(height: 16),
-
         Expanded(
           child: BlocBuilder<ProductBloc, ProductState>(
             buildWhen: (prev, curr) =>
@@ -335,10 +327,11 @@ class _SheetBodyState extends State<_SheetBody> {
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _ProductTile(
                           product: filtered[i],
-                          onAdd: () {
-                            widget.onProductAdded(filtered[i]);
-                            Navigator.pop(context);
-                          },
+                          // ── KEY CHANGE ───────────────────────────────────
+                          // onProductAdded is passed down from CreateOrderView
+                          // _AddProductDetailSheet will call it with the
+                          // ProductModel that has cartQty/cartRate/etc filled in
+                          onProductAdded: widget.onProductAdded,
                         ),
                       ),
                     );
@@ -423,9 +416,9 @@ class _EmptySearch extends StatelessWidget {
 
 class _ProductTile extends StatelessWidget {
   final ProductModel product;
-  final VoidCallback onAdd;
+  final ValueChanged<ProductModel> onProductAdded;
 
-  const _ProductTile({required this.product, required this.onAdd});
+  const _ProductTile({required this.product, required this.onProductAdded});
 
   @override
   Widget build(BuildContext context) {
@@ -492,7 +485,10 @@ class _ProductTile extends StatelessWidget {
               onTap: () => _AddProductDetailSheet.show(
                 context,
                 product: product,
-                onSave: onAdd,
+                // ── KEY CHANGE ─────────────────────────────────────────
+                // onSave now receives the filled ProductModel
+                // and passes it up to CreateOrderView via onProductAdded
+                onSave: onProductAdded,
               ),
               child: Container(
                 width: 36,
@@ -519,14 +515,16 @@ class _ProductTile extends StatelessWidget {
 
 class _AddProductDetailSheet extends StatefulWidget {
   final ProductModel product;
-  final VoidCallback onSave;
+  final ValueChanged<ProductModel> onSave;
+  // ── CHANGED: onSave now takes a ProductModel (with cart fields)
+  // instead of a plain VoidCallback
 
   const _AddProductDetailSheet({required this.product, required this.onSave});
 
   static void show(
     BuildContext context, {
     required ProductModel product,
-    required VoidCallback onSave,
+    required ValueChanged<ProductModel> onSave,
   }) {
     showModalBottomSheet(
       context: context,
@@ -541,8 +539,6 @@ class _AddProductDetailSheet extends StatefulWidget {
 }
 
 class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
-  final _leftCtrl = TextEditingController();
-  final _rightCtrl = TextEditingController();
   final _qtyCtrl = TextEditingController();
   final _rateCtrl = TextEditingController();
   final _discountCtrl = TextEditingController();
@@ -560,8 +556,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
   void initState() {
     super.initState();
 
-    _leftCtrl.text = widget.product.compId.toString();
-    _rightCtrl.text = widget.product.compId.toString();
+    // Pre-fill from ProductModel
     _qtyCtrl.text = widget.product.depoDiscount.toStringAsFixed(2);
     _rateCtrl.text = (widget.product.salePrice ?? 0).toStringAsFixed(2);
     _discountCtrl.text = widget.product.discountRate.toStringAsFixed(2);
@@ -574,7 +569,6 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
     }
 
     log(
-      'compId: ${widget.product.compId} | '
       'depoDiscount: ${widget.product.depoDiscount} | '
       'salePrice: ${widget.product.salePrice} | '
       'discountRate: ${widget.product.discountRate}',
@@ -589,19 +583,47 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
 
   @override
   void dispose() {
-    for (final c in [
-      _leftCtrl,
-      _rightCtrl,
-      _qtyCtrl,
-      _rateCtrl,
-      _discountCtrl,
-      _notesCtrl,
-    ]) {
-      c.dispose();
-    }
+    _qtyCtrl.dispose();
+    _rateCtrl.dispose();
+    _discountCtrl.dispose();
+    _notesCtrl.dispose();
     _netNotifier.dispose();
     _saveEnabledNotifier.dispose();
     super.dispose();
+  }
+
+  // ── Called when user taps Save ──────────────────────────────────────────
+  void _onSaveTapped() {
+    // Build a new ProductModel with cart fields filled from what user typed
+    final cartProduct = widget.product.copyWithCart(
+      cartQty: _qty,
+      cartRate: _rate,
+      cartDiscount: _disc,
+      cartNetAmount: _net,
+      cartNotes: _notesCtrl.text.trim(),
+    );
+
+    log(
+      'Saving to cart — '
+      'product: ${cartProduct.name} | '
+      'qty: ${cartProduct.cartQty} | '
+      'rate: ${cartProduct.cartRate} | '
+      'discount: ${cartProduct.cartDiscount} | '
+      'net: ${cartProduct.cartNetAmount}',
+      name: 'DetailSheet.save',
+    );
+
+    // ── Pass the filled product back up ──────────────────────────────────
+    // This calls onProductAdded in CreateOrderView via:
+    //   _ProductTile.onProductAdded
+    //   → _AddProductDetailSheet.onSave
+    //   → CreateOrderView._cart.add(cartProduct)
+    widget.onSave(cartProduct);
+
+    // Close detail sheet
+    Navigator.pop(context);
+    // Close product list sheet
+    Navigator.pop(context);
   }
 
   @override
@@ -671,11 +693,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
                   controller: sc,
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   children: [
-                    _row(
-                      _field(_leftCtrl, 'Left', 'compId'),
-                      _field(_rightCtrl, 'Right', 'compId'),
-                    ),
-                    const SizedBox(height: 12),
+                    // Quantity & Rate
                     _row(
                       _field(
                         _qtyCtrl,
@@ -691,6 +709,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
                       ),
                     ),
                     const SizedBox(height: 12),
+                    // Discount & Net Amount
                     _row(
                       _field(
                         _discountCtrl,
@@ -701,6 +720,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
                       _netBox(),
                     ),
                     const SizedBox(height: 12),
+                    // Notes + Save button
                     _notesRow(),
                     const SizedBox(height: 24),
                   ],
@@ -822,11 +842,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
             builder: (_, enabled, _) => _BlackBtn(
               label: 'Save',
               enabled: enabled,
-              onTap: () {
-                widget.onSave();
-                Navigator.pop(context);
-                Navigator.pop(context);
-              },
+              onTap: _onSaveTapped, // ← calls _onSaveTapped
             ),
           ),
         ),

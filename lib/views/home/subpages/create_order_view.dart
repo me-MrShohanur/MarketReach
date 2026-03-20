@@ -1,11 +1,10 @@
 import 'dart:developer';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:marketing/bloc/customer/customer_provider.dart';
 import 'package:marketing/services/models/products_model.dart';
-import 'package:marketing/services/provider/current_user.dart';
+import 'package:marketing/services/provider/ordersave_service.dart';
 import 'package:marketing/views/home/subpages/product_list_view.dart';
 import 'package:marketing/views/home/subpages/select_customer.dart';
 
@@ -17,13 +16,16 @@ class CreateOrderView extends StatefulWidget {
 }
 
 class _CreateOrderViewState extends State<CreateOrderView> {
+  // ── Cart — each ProductModel here has cartQty/cartRate/etc filled ────────
   final List<ProductModel> _cart = [];
+
   double discount = 0;
   double tax = 0;
   String orderStatus = 'Pending';
+  bool _isLoading = false;
 
   bool _customerSelected = false;
-  int? _selectedPartyId; // ✅ stores real accountId
+  int? _selectedPartyId;
 
   static const _orderStatuses = [
     'Pending',
@@ -32,19 +34,84 @@ class _CreateOrderViewState extends State<CreateOrderView> {
     'Cancelled',
   ];
 
-  double get _subtotal => _cart.fold(0, (s, p) => s + (p.salePrice ?? 0));
+  // Subtotal = sum of each product's cartNetAmount (what user actually entered)
+  double get _subtotal => _cart.fold(0, (s, p) => s + p.cartNetAmount);
   double get _total => _subtotal - discount + tax;
 
   bool get _canAddProducts => _customerSelected;
-  bool get _canCreateOrder => _customerSelected && _cart.isNotEmpty;
+  bool get _canCreateOrder =>
+      _customerSelected && _cart.isNotEmpty && !_isLoading;
 
+  // ── Open product sheet ────────────────────────────────────────────────────
   void _openSheet() {
     if (!_canAddProducts) return;
     AddProductsSheet.show(
       context,
-      partyId: _selectedPartyId ?? 0, // ✅ real accountId passed here
+      partyId: _selectedPartyId ?? 0,
       categoryId: 1,
-      onProductAdded: (p) => setState(() => _cart.add(p)),
+      // ── This callback is what runs when user taps Save in detail sheet ──
+      // It receives the ProductModel with cartQty/cartRate/etc filled in
+      onProductAdded: (ProductModel product) {
+        setState(() => _cart.add(product));
+        log(
+          'Added to cart: ${product.name} | '
+          'qty=${product.cartQty} | '
+          'rate=${product.cartRate} | '
+          'net=${product.cartNetAmount}',
+          name: 'Cart',
+        );
+      },
+    );
+  }
+
+  // ── Submit order ──────────────────────────────────────────────────────────
+  Future<void> _submitOrder() async {
+    if (!_canCreateOrder) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final response = await OrderSaveService.saveOrder(
+        partyId: _selectedPartyId!,
+        cart: _cart,
+        discount: discount,
+        tax: tax,
+      );
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✓ ${response.result} (Order #${response.orderId})'),
+          backgroundColor: const Color(0xFF4CAF50),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+
+      Navigator.maybePop(context);
+    } on OrderSaveException catch (e) {
+      if (!mounted) return;
+      _showError(e.message);
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Unexpected error: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
     );
   }
 
@@ -64,6 +131,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
                     children: [
+                      // ── Customer Dropdown ──────────────────────────────
                       BlocProvider(
                         create: (_) => CustomerBloc()..add(LoadCustomers()),
                         child: BlocConsumer<CustomerBloc, CustomerState>(
@@ -73,8 +141,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                               final selected = state.selectedCustomer!;
                               setState(() {
                                 _customerSelected = true;
-                                _selectedPartyId =
-                                    selected.accountId; // ✅ store
+                                _selectedPartyId = selected.accountId;
                               });
                               log(
                                 'Customer selected: '
@@ -86,7 +153,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                                 state.selectedCustomer == null) {
                               setState(() {
                                 _customerSelected = false;
-                                _selectedPartyId = null; // ✅ reset
+                                _selectedPartyId = null;
                               });
                             }
                           },
@@ -97,6 +164,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
 
                       const SizedBox(height: 12),
 
+                      // ── Cart ───────────────────────────────────────────
                       _cart.isEmpty
                           ? _EmptyCart(
                               onAdd: _openSheet,
@@ -110,6 +178,8 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                             ),
 
                       const SizedBox(height: 12),
+
+                      // ── Summary ────────────────────────────────────────
                       _SummaryCard(
                         subtotal: _subtotal,
                         discount: discount,
@@ -118,7 +188,10 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                         onDiscountChanged: (v) => setState(() => discount = v),
                         onTaxChanged: (v) => setState(() => tax = v),
                       ),
+
                       const SizedBox(height: 12),
+
+                      // ── Status ─────────────────────────────────────────
                       _StatusDropdown(
                         label: 'Order Status',
                         value: orderStatus,
@@ -126,16 +199,21 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                         accent: const Color(0xFFFFC107),
                         onChanged: (v) => setState(() => orderStatus = v!),
                       ),
+
                       const SizedBox(height: 16),
                     ],
                   ),
                 ),
               ),
+
+              // ── Create Order Button ──────────────────────────────────────
               _BottomButton(
-                label: 'Create Order',
-                icon: Icons.check_rounded,
+                label: _isLoading ? 'Creating Order…' : 'Create Order',
+                icon: _isLoading
+                    ? Icons.hourglass_top_rounded
+                    : Icons.check_rounded,
                 enabled: _canCreateOrder,
-                onTap: () {},
+                onTap: _submitOrder,
               ),
             ],
           ),
@@ -373,6 +451,8 @@ class _CartList extends StatelessWidget {
   }
 }
 
+// ─── Cart Tile — shows cartNetAmount, not salePrice ──────────────────────────
+
 class _CartTile extends StatelessWidget {
   final ProductModel product;
   final VoidCallback onRemove;
@@ -413,17 +493,27 @@ class _CartTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  product.salePrice != null
-                      ? '৳${product.salePrice!.toStringAsFixed(2)}'
-                      : 'Price N/A',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: product.salePrice != null
-                        ? const Color(0xFF4CAF50)
-                        : Colors.black38,
-                  ),
+                // Show qty × rate and net amount
+                Row(
+                  children: [
+                    Text(
+                      '${product.cartQty.toStringAsFixed(0)} × '
+                      '৳${product.cartRate.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.black45,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '৳${product.cartNetAmount.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF4CAF50),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -483,7 +573,10 @@ class _SummaryCard extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            _Row(label: 'Subtotal', value: '৳${subtotal.toStringAsFixed(2)}'),
+            _SummaryRow(
+              label: 'Subtotal',
+              value: '৳${subtotal.toStringAsFixed(2)}',
+            ),
             const SizedBox(height: 12),
             _EditableRow(
               label: 'Discount',
@@ -525,9 +618,9 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
-class _Row extends StatelessWidget {
+class _SummaryRow extends StatelessWidget {
   final String label, value;
-  const _Row({required this.label, required this.value});
+  const _SummaryRow({required this.label, required this.value});
 
   @override
   Widget build(BuildContext context) => Row(
@@ -587,7 +680,6 @@ class _CurrencyInputState extends State<_CurrencyInput> {
     _ctrl = TextEditingController(
       text: widget.value == 0 ? '0' : widget.value.toString(),
     );
-    log(CurrentUser.customerID.toString(), name: 'CurrentUser');
   }
 
   @override
@@ -799,33 +891,6 @@ class _Card extends StatelessWidget {
       ],
     ),
     child: child,
-  );
-}
-
-class _BlackBox extends StatelessWidget {
-  final Widget child;
-  final double radius;
-  final VoidCallback? onTap;
-
-  const _BlackBox({required this.child, this.radius = 12, this.onTap});
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    onTap: onTap,
-    child: Container(
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(radius),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 8,
-            offset: Offset(0, 4),
-          ),
-        ],
-      ),
-      child: child,
-    ),
   );
 }
 
