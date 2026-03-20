@@ -1,7 +1,10 @@
 import 'dart:developer';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:marketing/bloc/customer/customer_provider.dart';
 import 'package:marketing/services/models/products_model.dart';
 import 'package:marketing/services/provider/ordersave_service.dart';
@@ -16,8 +19,8 @@ class CreateOrderView extends StatefulWidget {
 }
 
 class _CreateOrderViewState extends State<CreateOrderView> {
-  // ── Cart — each ProductModel here has cartQty/cartRate/etc filled ────────
   final List<ProductModel> _cart = [];
+  final List<File> _attachments = [];
 
   double discount = 0;
   double tax = 0;
@@ -34,7 +37,6 @@ class _CreateOrderViewState extends State<CreateOrderView> {
     'Cancelled',
   ];
 
-  // Subtotal = sum of each product's cartNetAmount (what user actually entered)
   double get _subtotal => _cart.fold(0, (s, p) => s + p.cartNetAmount);
   double get _total => _subtotal - discount + tax;
 
@@ -42,29 +44,112 @@ class _CreateOrderViewState extends State<CreateOrderView> {
   bool get _canCreateOrder =>
       _customerSelected && _cart.isNotEmpty && !_isLoading;
 
-  // ── Open product sheet ────────────────────────────────────────────────────
+  void _resetForm() {
+    setState(() {
+      _cart.clear();
+      _attachments.clear();
+      discount = 0;
+      tax = 0;
+      orderStatus = 'Pending';
+      _isLoading = false;
+      _customerSelected = false;
+      _selectedPartyId = null;
+    });
+  }
+
+  // ── Attachment pickers ────────────────────────────────────────────────────
+  Future<void> _pickFromCamera() async {
+    try {
+      final XFile? photo = await ImagePicker().pickImage(
+        source: ImageSource.camera,
+        imageQuality: 80,
+      );
+      if (photo != null) {
+        setState(() => _attachments.add(File(photo.path)));
+        log('Camera photo added: ${photo.path}', name: 'Attachments');
+      }
+    } catch (e) {
+      _showError('Camera error: $e');
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    try {
+      final List<XFile> photos = await ImagePicker().pickMultiImage(
+        imageQuality: 80,
+      );
+      if (photos.isNotEmpty) {
+        setState(() {
+          for (final p in photos) _attachments.add(File(p.path));
+        });
+        log('${photos.length} photo(s) from gallery', name: 'Attachments');
+      }
+    } catch (e) {
+      _showError('Gallery error: $e');
+    }
+  }
+
+  Future<void> _pickFiles() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+      );
+      if (result != null && result.files.isNotEmpty) {
+        setState(() {
+          for (final f in result.files) {
+            if (f.path != null) _attachments.add(File(f.path!));
+          }
+        });
+        log('${result.files.length} file(s) added', name: 'Attachments');
+      }
+    } catch (e) {
+      _showError('File picker error: $e');
+    }
+  }
+
+  void _showAttachmentOptions() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _AttachmentOptionsSheet(
+        onCamera: () {
+          Navigator.pop(context);
+          _pickFromCamera();
+        },
+        onGallery: () {
+          Navigator.pop(context);
+          _pickFromGallery();
+        },
+        onFiles: () {
+          Navigator.pop(context);
+          _pickFiles();
+        },
+      ),
+    );
+  }
+
+  void _removeAttachment(int index) =>
+      setState(() => _attachments.removeAt(index));
+
   void _openSheet() {
     if (!_canAddProducts) return;
     AddProductsSheet.show(
       context,
       partyId: _selectedPartyId ?? 0,
       categoryId: 1,
-      // ── This callback is what runs when user taps Save in detail sheet ──
-      // It receives the ProductModel with cartQty/cartRate/etc filled in
       onProductAdded: (ProductModel product) {
         setState(() => _cart.add(product));
         log(
           'Added to cart: ${product.name} | '
-          'qty=${product.cartQty} | '
-          'rate=${product.cartRate} | '
-          'net=${product.cartNetAmount}',
+          'qty=${product.cartQty} | net=${product.cartNetAmount}',
           name: 'Cart',
         );
       },
     );
   }
 
-  // ── Submit order ──────────────────────────────────────────────────────────
   Future<void> _submitOrder() async {
     if (!_canCreateOrder) return;
     setState(() => _isLoading = true);
@@ -75,13 +160,14 @@ class _CreateOrderViewState extends State<CreateOrderView> {
         cart: _cart,
         discount: discount,
         tax: tax,
+        files: _attachments.isEmpty ? null : _attachments,
       );
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('✓ ${response.result} (Order #${response.orderId})'),
+          content: Text('✓ ${response.result} (Order ID #${response.orderId})'),
           backgroundColor: const Color(0xFF4CAF50),
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -91,7 +177,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
         ),
       );
 
-      Navigator.maybePop(context);
+      _resetForm();
     } on OrderSaveException catch (e) {
       if (!mounted) return;
       _showError(e.message);
@@ -99,7 +185,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
       if (!mounted) return;
       _showError('Unexpected error: $e');
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted && _isLoading) setState(() => _isLoading = false);
     }
   }
 
@@ -124,14 +210,17 @@ class _CreateOrderViewState extends State<CreateOrderView> {
         body: SafeArea(
           child: Column(
             children: [
-              _Header(),
+              // ── CHANGED: pass attachment count + callback to header ──────
+              _Header(
+                attachmentCount: _attachments.length,
+                onAttachmentTap: _showAttachmentOptions,
+              ),
               const SizedBox(height: 24),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
                     children: [
-                      // ── Customer Dropdown ──────────────────────────────
                       BlocProvider(
                         create: (_) => CustomerBloc()..add(LoadCustomers()),
                         child: BlocConsumer<CustomerBloc, CustomerState>(
@@ -144,8 +233,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                                 _selectedPartyId = selected.accountId;
                               });
                               log(
-                                'Customer selected: '
-                                'id=${selected.accountId} | '
+                                'Customer: id=${selected.accountId} '
                                 'name=${selected.aliasName}',
                                 name: 'CustomerDropdown',
                               );
@@ -164,7 +252,6 @@ class _CreateOrderViewState extends State<CreateOrderView> {
 
                       const SizedBox(height: 12),
 
-                      // ── Cart ───────────────────────────────────────────
                       _cart.isEmpty
                           ? _EmptyCart(
                               onAdd: _openSheet,
@@ -179,7 +266,6 @@ class _CreateOrderViewState extends State<CreateOrderView> {
 
                       const SizedBox(height: 12),
 
-                      // ── Summary ────────────────────────────────────────
                       _SummaryCard(
                         subtotal: _subtotal,
                         discount: discount,
@@ -191,7 +277,16 @@ class _CreateOrderViewState extends State<CreateOrderView> {
 
                       const SizedBox(height: 12),
 
-                      // ── Status ─────────────────────────────────────────
+                      // Attachments card — only shows when there are files
+                      if (_attachments.isNotEmpty)
+                        _AttachmentsCard(
+                          files: _attachments,
+                          onAdd: _showAttachmentOptions,
+                          onRemove: _removeAttachment,
+                        ),
+
+                      if (_attachments.isNotEmpty) const SizedBox(height: 12),
+
                       _StatusDropdown(
                         label: 'Order Status',
                         value: orderStatus,
@@ -206,7 +301,6 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                 ),
               ),
 
-              // ── Create Order Button ──────────────────────────────────────
               _BottomButton(
                 label: _isLoading ? 'Creating Order…' : 'Create Order',
                 icon: _isLoading
@@ -223,9 +317,14 @@ class _CreateOrderViewState extends State<CreateOrderView> {
   }
 }
 
-// ─── Header ───────────────────────────────────────────────────────────────────
+// ─── Header — QR button replaced with attachment button ──────────────────────
 
 class _Header extends StatelessWidget {
+  final int attachmentCount;
+  final VoidCallback onAttachmentTap;
+
+  const _Header({required this.attachmentCount, required this.onAttachmentTap});
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -259,20 +358,443 @@ class _Header extends StatelessWidget {
               ),
             ],
           ),
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.qr_code_scanner_rounded,
-              color: Colors.white,
-              size: 22,
+
+          // ── Attachment button replaces the old QR button ───────────────
+          GestureDetector(
+            onTap: onAttachmentTap,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.attach_file_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+                // Badge — shows count when files are attached
+                if (attachmentCount > 0)
+                  Positioned(
+                    top: -6,
+                    right: -6,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF2196F3),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          attachmentCount > 9
+                              ? '9+'
+                              : attachmentCount.toString(),
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Attachment Options Bottom Sheet ─────────────────────────────────────────
+
+class _AttachmentOptionsSheet extends StatelessWidget {
+  final VoidCallback onCamera;
+  final VoidCallback onGallery;
+  final VoidCallback onFiles;
+
+  const _AttachmentOptionsSheet({
+    required this.onCamera,
+    required this.onGallery,
+    required this.onFiles,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFF5F5F5),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        16,
+        24,
+        24 + MediaQuery.of(context).padding.bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(
+              color: Colors.black12,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Add Attachment',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Attach photos or files to this order',
+              style: TextStyle(fontSize: 13, color: Colors.black45),
+            ),
+          ),
+          const SizedBox(height: 20),
+          _OptionTile(
+            icon: Icons.camera_alt_rounded,
+            iconColor: const Color(0xFF2196F3),
+            iconBg: const Color(0xFFE3F2FD),
+            title: 'Take Photo',
+            subtitle: 'Open camera',
+            onTap: onCamera,
+          ),
+          const SizedBox(height: 10),
+          _OptionTile(
+            icon: Icons.photo_library_rounded,
+            iconColor: const Color(0xFF9C27B0),
+            iconBg: const Color(0xFFF3E5F5),
+            title: 'Choose from Gallery',
+            subtitle: 'Select one or more photos',
+            onTap: onGallery,
+          ),
+          const SizedBox(height: 10),
+          _OptionTile(
+            icon: Icons.attach_file_rounded,
+            iconColor: const Color(0xFF4CAF50),
+            iconBg: const Color(0xFFE8F5E9),
+            title: 'Browse Files',
+            subtitle: 'PDF, Word, images',
+            onTap: onFiles,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OptionTile extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBg;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _OptionTile({
+    required this.icon,
+    required this.iconColor,
+    required this.iconBg,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0D000000),
+              blurRadius: 8,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: iconColor, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 12, color: Colors.black45),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 14,
+              color: Colors.black26,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Attachments Card — shown in scroll when files exist ─────────────────────
+
+class _AttachmentsCard extends StatelessWidget {
+  final List<File> files;
+  final VoidCallback onAdd;
+  final ValueChanged<int> onRemove;
+
+  const _AttachmentsCard({
+    required this.files,
+    required this.onAdd,
+    required this.onRemove,
+  });
+
+  String _ext(File f) {
+    final parts = f.path.split('/').last.split('.');
+    return parts.length > 1 ? parts.last.toLowerCase() : 'file';
+  }
+
+  bool _isImage(File f) =>
+      ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].contains(_ext(f));
+
+  String _fileName(File f) => f.path.split('/').last;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: const Border(
+          left: BorderSide(color: Color(0xFF2196F3), width: 3),
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.attach_file_rounded,
+                      size: 18,
+                      color: Colors.black45,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Attachments (${files.length})',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black45,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
+                GestureDetector(
+                  onTap: onAdd,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.add_rounded, color: Colors.white, size: 14),
+                        SizedBox(width: 4),
+                        Text(
+                          'Add More',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 14),
+
+            // Image thumbnails
+            if (files.any(_isImage)) ...[
+              SizedBox(
+                height: 90,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: files.length,
+                  itemBuilder: (_, i) {
+                    final file = files[i];
+                    if (!_isImage(file)) return const SizedBox.shrink();
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Stack(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(10),
+                            child: Image.file(
+                              file,
+                              width: 90,
+                              height: 90,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: GestureDetector(
+                              onTap: () => onRemove(i),
+                              child: Container(
+                                width: 22,
+                                height: 22,
+                                decoration: const BoxDecoration(
+                                  color: Colors.black54,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.close_rounded,
+                                  color: Colors.white,
+                                  size: 13,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+
+            // Non-image files
+            ...files
+                .asMap()
+                .entries
+                .where((e) => !_isImage(e.value))
+                .map(
+                  (entry) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF5F5F5),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                _ext(entry.value).toUpperCase(),
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF2196F3),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              _fileName(entry.value),
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => onRemove(entry.key),
+                            child: const Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: Colors.redAccent,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+          ],
+        ),
       ),
     );
   }
@@ -283,7 +805,6 @@ class _Header extends StatelessWidget {
 class _EmptyCart extends StatelessWidget {
   final VoidCallback onAdd;
   final bool enabled;
-
   const _EmptyCart({required this.onAdd, this.enabled = true});
 
   @override
@@ -440,9 +961,9 @@ class _CartList extends StatelessWidget {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: items.length,
-            separatorBuilder: (_, _) =>
+            separatorBuilder: (context, index) =>
                 const Divider(height: 1, color: Color(0xFFF5F5F5)),
-            itemBuilder: (_, i) =>
+            itemBuilder: (context, i) =>
                 _CartTile(product: items[i], onRemove: () => onRemove(i)),
           ),
         ],
@@ -451,12 +972,9 @@ class _CartList extends StatelessWidget {
   }
 }
 
-// ─── Cart Tile — shows cartNetAmount, not salePrice ──────────────────────────
-
 class _CartTile extends StatelessWidget {
   final ProductModel product;
   final VoidCallback onRemove;
-
   const _CartTile({required this.product, required this.onRemove});
 
   @override
@@ -493,7 +1011,6 @@ class _CartTile extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 3),
-                // Show qty × rate and net amount
                 Row(
                   children: [
                     Text(
@@ -659,8 +1176,6 @@ class _EditableRow extends StatelessWidget {
     ],
   );
 }
-
-// ─── Currency Input ───────────────────────────────────────────────────────────
 
 class _CurrencyInput extends StatefulWidget {
   final double value;
@@ -870,7 +1385,6 @@ class _BottomButton extends StatelessWidget {
 class _Card extends StatelessWidget {
   final Widget child;
   final Color? accent;
-
   const _Card({required this.child, this.accent});
 
   @override
@@ -897,7 +1411,6 @@ class _Card extends StatelessWidget {
 class _IconBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
-
   const _IconBtn({required this.icon, required this.onTap});
 
   @override

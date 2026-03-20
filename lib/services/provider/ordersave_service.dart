@@ -1,10 +1,9 @@
 import 'dart:convert';
 import 'dart:developer';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:marketing/services/models/products_model.dart';
 import 'package:marketing/services/provider/current_user.dart';
-
-// ─── Response Model ───────────────────────────────────────────────────────────
 
 class OrderSaveResponse {
   final bool status;
@@ -26,8 +25,6 @@ class OrderSaveResponse {
   }
 }
 
-// ─── Exception ────────────────────────────────────────────────────────────────
-
 class OrderSaveException implements Exception {
   final String message;
   OrderSaveException(this.message);
@@ -35,125 +32,108 @@ class OrderSaveException implements Exception {
   String toString() => message;
 }
 
-// ─── Service ──────────────────────────────────────────────────────────────────
-
 class OrderSaveService {
   static const _baseUrl = 'http://103.125.253.59:1122/api/v1';
-
-  // Placeholder for required string fields that have no UI yet
-  // The server rejects empty string '' but accepts any non-empty value
-  static const _na = 'N/A';
-  static const _zero = '0';
 
   static Future<OrderSaveResponse> saveOrder({
     required int partyId,
     required List<ProductModel> cart,
     required double discount,
     required double tax,
+    List<File>? files, // ← optional order-level attachments
   }) async {
-    // ── Date: "20260320" ──────────────────────────────────────────────────
     final now = DateTime.now();
     final orderDate =
         '${now.year}'
         '${now.month.toString().padLeft(2, '0')}'
         '${now.day.toString().padLeft(2, '0')}';
 
-    // ── Totals ────────────────────────────────────────────────────────────
     final double subtotal = cart.fold(0, (s, p) => s + p.cartNetAmount);
     final double netAmount = subtotal - discount;
     final double vatAmount = tax;
     final double netPayable = netAmount + vatAmount;
 
-    final boundary =
-        '----FlutterBoundary${DateTime.now().millisecondsSinceEpoch}';
     final uri = Uri.parse('$_baseUrl/Order/Save');
+    final request = http.MultipartRequest('POST', uri);
 
-    final request = http.Request('POST', uri);
     request.headers['accept'] = '*/*';
     request.headers['Authorization'] = 'Bearer ${CurrentUser.token}';
-    request.headers['Content-Type'] = 'multipart/form-data; boundary=$boundary';
 
-    final body = StringBuffer();
+    request.fields.addAll({
+      'Master.OrderType': '7',
+      'Master.OrderId': '0',
+      'Master.Status': '0',
+      'Master.CompId': CurrentUser.compId.toString(),
+      'Master.BranchId': CurrentUser.branchId.toString(),
+      'Master.UserId': CurrentUser.userId.toString(),
+      'Master.PartyId': partyId.toString(),
+      'Master.OrderDate': orderDate,
+      'Master.NetAmount': netAmount.toStringAsFixed(2),
+      'Master.NetPayable': netPayable.toStringAsFixed(2),
+      'Master.DiscountAmount': discount.toStringAsFixed(2),
+      'Master.VatAmount': vatAmount.toStringAsFixed(2),
+      'Master.DiscountRate': '0',
+      'Master.VatRate': '0',
+      'Master.PaidAmount': '0',
+      'Master.Deposite': '0',
+      'Master.PaymentType': 'string',
+      'Master.BankId': '0',
+      'Master.CurrencyId': '0',
+      'Master.CurrencyRate': '0',
+      'Master.PercentAmount': '0',
+      'Master.OtherAddition': '0',
+      'Master.OtherDeduction': '0',
+      'Master.QuoteId': '0',
+      'Master.OrderNo': 'string',
+      'Master.RefNo': 'string',
+      'Master.Narration': 'string',
+      'Master.BillTo': 'string',
+      'Master.BillAddress': 'string',
+      'Master.BillContactNo': 'string',
+      'Master.BillEmail': 'string',
+      'Master.BillTerms': 'string',
+      'Master.ShippingAddress': 'string',
+      'Master.ShippingEmail': 'string',
+      'Master.ShippingContract': 'string',
+      'Master.ShippingContractName': 'string',
+      'Master.City': 'string',
+      'Master.PostalCode': 'string',
+      'Master.CheckedNarration': 'string',
+      'Master.VerifiedNarration': 'string',
+      'Master.RejectedNarration': 'string',
+      'Master.ManagementNarration': 'string',
+    });
 
-    void add(String name, String value) {
-      body.write('--$boundary\r\n');
-      body.write('Content-Disposition: form-data; name="$name"\r\n');
-      body.write('\r\n');
-      body.write('$value\r\n');
-    }
-
-    // ── Fixed ─────────────────────────────────────────────────────────────
-    add('Master.OrderType', '7');
-    add('Master.OrderId', '0');
-    add('Master.Status', '0');
-
-    // ── From CurrentUser ──────────────────────────────────────────────────
-    add('Master.CompId', CurrentUser.compId.toString());
-    add('Master.BranchId', CurrentUser.branchId.toString());
-    add('Master.UserId', CurrentUser.userId.toString());
-
-    // ── From customer selection ───────────────────────────────────────────
-    add('Master.PartyId', partyId.toString());
-
-    // ── Date ──────────────────────────────────────────────────────────────
-    add('Master.OrderDate', orderDate);
-
-    // ── Calculated totals ─────────────────────────────────────────────────
-    add('Master.NetAmount', netAmount.toStringAsFixed(2));
-    add('Master.NetPayable', netPayable.toStringAsFixed(2));
-    add('Master.DiscountAmount', discount.toStringAsFixed(2));
-    add('Master.VatAmount', vatAmount.toStringAsFixed(2));
-    add('Master.DiscountRate', _zero);
-    add('Master.VatRate', _zero);
-
-    // ── Payment ───────────────────────────────────────────────────────────
-    add('Master.PaidAmount', _zero);
-    add('Master.Deposite', _zero);
-    add('Master.PaymentType', 'Cash');
-    add('Master.BankId', _zero);
-    add('Master.CurrencyId', '1');
-    add('Master.CurrencyRate', '1');
-    add('Master.PercentAmount', _zero);
-    add('Master.OtherAddition', _zero);
-    add('Master.OtherDeduction', _zero);
-    add('Master.QuoteId', _zero);
-
-    // ── Required string fields — server rejects empty string ─────────────
-    // All fields below showed up in the validation error list.
-    // Using 'N/A' as placeholder until you add UI fields for them.
-    add('Master.OrderNo', _na);
-    add('Master.RefNo', _na);
-    add('Master.Narration', _na);
-    add('Master.BillTo', _na);
-    add('Master.BillAddress', _na);
-    add('Master.BillContactNo', _na);
-    add('Master.BillEmail', _na);
-    add('Master.BillTerms', _na);
-    add('Master.ShippingAddress', _na);
-    add('Master.ShippingEmail', _na);
-    add('Master.ShippingContract', _na);
-    add('Master.ShippingContractName', _na);
-    add('Master.City', _na);
-    add('Master.PostalCode', _na);
-    add('Master.CheckedNarration', _na);
-    add('Master.VerifiedNarration', _na);
-    add('Master.RejectedNarration', _na);
-    add('Master.ManagementNarration', _na);
-
-    // ── Details — one field per product (repeated same key) ───────────────
+    // ── Details — one field per product ───────────────────────────────────
     for (final product in cart) {
-      add('Details', jsonEncode(_buildDetail(product)));
+      request.files.add(
+        http.MultipartFile.fromString(
+          'Details',
+          jsonEncode(_buildDetail(product)),
+        ),
+      );
     }
 
-    // ── Close ─────────────────────────────────────────────────────────────
-    body.write('--$boundary--\r\n');
-    request.body = body.toString();
+    // ── Files — one field per attachment ──────────────────────────────────
+    // Each file uses field name "formFiles" — same key repeated per file.
+    // Mirrors: -F 'formFiles=@photo1.jpg' -F 'formFiles=@photo2.jpg'
+    if (files != null && files.isNotEmpty) {
+      for (final file in files) {
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            'formFiles', // field name — repeated per file
+            file.path, // actual file path
+          ),
+        );
+      }
+      log('Attaching ${files.length} file(s)', name: 'OrderSave');
+    }
 
     log('=== ORDER SAVE ===', name: 'OrderSave');
-    log('Date    : $orderDate', name: 'OrderSave');
     log('PartyId : $partyId', name: 'OrderSave');
+    log('Date    : $orderDate', name: 'OrderSave');
     log('Items   : ${cart.length}', name: 'OrderSave');
-    log('Net     : $netAmount', name: 'OrderSave');
+    log('Files   : ${files?.length ?? 0}', name: 'OrderSave');
 
     try {
       final streamed = await request.send().timeout(
@@ -174,17 +154,18 @@ class OrderSaveService {
         }
         return result;
       } else if (response.statusCode == 400) {
-        // Parse validation errors into a readable message
+        log('400 body: ${response.body}', name: 'OrderSave.ERROR');
         try {
-          final errJson = jsonDecode(response.body);
-          final errors = errJson['errors'] as Map<String, dynamic>?;
+          final err = jsonDecode(response.body);
+          final errors = err['errors'] as Map<String, dynamic>?;
           if (errors != null && errors.isNotEmpty) {
-            final firstKey = errors.keys.first;
-            final firstMsg = (errors[firstKey] as List).first.toString();
-            throw OrderSaveException('$firstKey: $firstMsg');
+            final msgs = errors.entries
+                .map((e) => '${e.key}: ${(e.value as List).first}')
+                .join('\n');
+            throw OrderSaveException(msgs);
           }
-        } catch (parseErr) {
-          if (parseErr is OrderSaveException) rethrow;
+        } catch (e) {
+          if (e is OrderSaveException) rethrow;
         }
         throw OrderSaveException('Validation error: ${response.body}');
       } else if (response.statusCode == 401) {
@@ -206,7 +187,7 @@ class OrderSaveService {
       'productId': p.productId,
       'productTypeId': 0,
       'productDesc': p.name,
-      'custRef': _na,
+      'custRef': 'string',
       'unitQty': p.cartQty,
       'tQty': p.cartQty * p.factor,
       'pcsQty': p.cartQty,
@@ -228,7 +209,7 @@ class OrderSaveService {
       'compId': CurrentUser.compId,
       'branchId': CurrentUser.branchId,
       'id': 0,
-      'remarks': p.cartNotes.isEmpty ? _na : p.cartNotes,
+      'remarks': p.cartNotes.isEmpty ? 'string' : p.cartNotes,
     };
   }
 }
