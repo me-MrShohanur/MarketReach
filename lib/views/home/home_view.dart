@@ -151,8 +151,8 @@ class HomeView extends StatelessWidget {
                   crossAxisSpacing: 12,
                   mainAxisSpacing: 12,
                   childAspectRatio: 1.45,
-                  children: const [
-                    _StatCard(
+                  children: [
+                    const _StatCard(
                       value: '\$0.00',
                       label: "Today's Sales",
                       accentColor: Color(0xFF4CAF50),
@@ -160,14 +160,16 @@ class HomeView extends StatelessWidget {
                     _StatCard(
                       value: '0',
                       label: 'Pending Orders',
-                      accentColor: Color(0xFFFFC107),
+                      accentColor: const Color(0xFFFFC107),
+                      onTap: () =>
+                          Navigator.pushNamed(context, pendingOrdersRoute),
                     ),
-                    _StatCard(
+                    const _StatCard(
                       value: '0',
                       label: 'Low Stock Items',
                       accentColor: Color(0xFFF44336),
                     ),
-                    _StatCard(
+                    const _StatCard(
                       value: '2',
                       label: 'Total Products',
                       accentColor: Color(0xFF2196F3),
@@ -225,52 +227,57 @@ class _StatCard extends StatelessWidget {
   final String value;
   final String label;
   final Color accentColor;
+  final VoidCallback? onTap;
 
   const _StatCard({
     required this.value,
     required this.label,
     required this.accentColor,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border(left: BorderSide(color: accentColor, width: 3)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w700,
-              color: accentColor,
-              letterSpacing: -0.5,
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border(left: BorderSide(color: accentColor, width: 3)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.black45,
-              fontWeight: FontWeight.w500,
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w700,
+                color: accentColor,
+                letterSpacing: -0.5,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 5),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.black45,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

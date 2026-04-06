@@ -240,7 +240,7 @@ class _SheetBodyState extends State<_SheetBody> {
         const _DragHandle(),
         _SheetHeader(
           subtitle: 'Browse',
-          title: 'Add Products',
+          title: 'Products',
           badge: Container(
             width: 44,
             height: 44,
@@ -312,7 +312,7 @@ class _SheetBodyState extends State<_SheetBody> {
               if (state is ProductLoaded) {
                 return ValueListenableBuilder<String>(
                   valueListenable: _searchNotifier,
-                  builder: (_, query, _) {
+                  builder: (context, query, child) {
                     final filtered = _filtered(state.products, query);
                     if (filtered.isEmpty) return const _EmptySearch();
 
@@ -323,14 +323,10 @@ class _SheetBodyState extends State<_SheetBody> {
                         vertical: 4,
                       ),
                       itemCount: filtered.length,
-                      itemBuilder: (_, i) => Padding(
+                      itemBuilder: (context, i) => Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _ProductTile(
                           product: filtered[i],
-                          // ── KEY CHANGE ───────────────────────────────────
-                          // onProductAdded is passed down from CreateOrderView
-                          // _AddProductDetailSheet will call it with the
-                          // ProductModel that has cartQty/cartRate/etc filled in
                           onProductAdded: widget.onProductAdded,
                         ),
                       ),
@@ -485,9 +481,6 @@ class _ProductTile extends StatelessWidget {
               onTap: () => _AddProductDetailSheet.show(
                 context,
                 product: product,
-                // ── KEY CHANGE ─────────────────────────────────────────
-                // onSave now receives the filled ProductModel
-                // and passes it up to CreateOrderView via onProductAdded
                 onSave: onProductAdded,
               ),
               child: Container(
@@ -516,8 +509,6 @@ class _ProductTile extends StatelessWidget {
 class _AddProductDetailSheet extends StatefulWidget {
   final ProductModel product;
   final ValueChanged<ProductModel> onSave;
-  // ── CHANGED: onSave now takes a ProductModel (with cart fields)
-  // instead of a plain VoidCallback
 
   const _AddProductDetailSheet({required this.product, required this.onSave});
 
@@ -544,6 +535,10 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
   final _discountCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
 
+  final _rateFocus = FocusNode();
+  final _discountFocus = FocusNode();
+  final _notesFocus = FocusNode();
+
   double get _qty => double.tryParse(_qtyCtrl.text) ?? 0;
   double get _rate => double.tryParse(_rateCtrl.text) ?? 0;
   double get _disc => double.tryParse(_discountCtrl.text) ?? 0;
@@ -555,8 +550,6 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
   @override
   void initState() {
     super.initState();
-
-    // Pre-fill from ProductModel
     _qtyCtrl.text = widget.product.depoDiscount.toStringAsFixed(2);
     _rateCtrl.text = (widget.product.salePrice ?? 0).toStringAsFixed(2);
     _discountCtrl.text = widget.product.discountRate.toStringAsFixed(2);
@@ -587,14 +580,15 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
     _rateCtrl.dispose();
     _discountCtrl.dispose();
     _notesCtrl.dispose();
+    _rateFocus.dispose();
+    _discountFocus.dispose();
+    _notesFocus.dispose();
     _netNotifier.dispose();
     _saveEnabledNotifier.dispose();
     super.dispose();
   }
 
-  // ── Called when user taps Save ──────────────────────────────────────────
   void _onSaveTapped() {
-    // Build a new ProductModel with cart fields filled from what user typed
     final cartProduct = widget.product.copyWithCart(
       cartQty: _qty,
       cartRate: _rate,
@@ -604,30 +598,29 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
     );
 
     log(
-      'Saving to cart — '
-      'product: ${cartProduct.name} | '
-      'qty: ${cartProduct.cartQty} | '
-      'rate: ${cartProduct.cartRate} | '
-      'discount: ${cartProduct.cartDiscount} | '
+      'Saving to cart — product: ${cartProduct.name} | '
+      'qty: ${cartProduct.cartQty} | rate: ${cartProduct.cartRate} | '
       'net: ${cartProduct.cartNetAmount}',
       name: 'DetailSheet.save',
     );
 
-    // ── Pass the filled product back up ──────────────────────────────────
-    // This calls onProductAdded in CreateOrderView via:
-    //   _ProductTile.onProductAdded
-    //   → _AddProductDetailSheet.onSave
-    //   → CreateOrderView._cart.add(cartProduct)
+    // Step 1: add product to cart first
     widget.onSave(cartProduct);
 
-    // Close detail sheet
-    Navigator.pop(context);
-    // Close product list sheet
-    Navigator.pop(context);
+    // Step 2: close both sheets at once safely.
+    // popUntil pops routes until it finds a PageRoute (a real screen).
+    // Bottom sheets are ModalBottomSheetRoute — NOT PageRoute.
+    // So this pops: _AddProductDetailSheet + AddProductsSheet
+    // and stops at CreateOrderView. Works whether search was active or not.
+    Navigator.of(context).popUntil((route) => route is PageRoute);
   }
 
   @override
   Widget build(BuildContext context) {
+    final hasDescription =
+        widget.product.description != null &&
+        widget.product.description!.trim().isNotEmpty;
+
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -645,82 +638,157 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const _DragHandle(),
-              _SheetHeader(
-                subtitle: 'Configure',
-                title: 'Add Product',
-                badge: Container(
-                  constraints: const BoxConstraints(maxWidth: 160),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Selected Product',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.white60,
-                          letterSpacing: 0.2,
-                        ),
+
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Configure',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.black45,
+                        letterSpacing: 0.2,
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        widget.product.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      widget.product.name,
+                      style: const TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                        color: Colors.black,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        if (widget.product.salePrice != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '৳${widget.product.salePrice!.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF2E7D32),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        if (widget.product.discountRate > 0)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFF3E0),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '${widget.product.discountRate.toStringAsFixed(0)}% off',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFE65100),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (hasDescription) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
                           color: Colors.white,
-                          letterSpacing: -0.3,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFEEEEEE)),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(
+                              Icons.info_outline_rounded,
+                              size: 15,
+                              color: Colors.black38,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                widget.product.description!,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black54,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
+                  ],
                 ),
               ),
+
               const SizedBox(height: 20),
+
               Expanded(
                 child: ListView(
                   controller: sc,
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   children: [
-                    // Quantity & Rate
                     _row(
                       _field(
                         _qtyCtrl,
                         'Quantity',
                         '0',
                         keyboard: TextInputType.number,
+                        inputAction: TextInputAction.next,
+                        onSubmitted: (_) => _rateFocus.requestFocus(),
                       ),
                       _field(
                         _rateCtrl,
                         'Rate',
                         '0.00',
                         keyboard: TextInputType.number,
+                        focusNode: _rateFocus,
+                        inputAction: TextInputAction.next,
+                        onSubmitted: (_) => _discountFocus.requestFocus(),
                       ),
                     ),
                     const SizedBox(height: 12),
-                    // Discount & Net Amount
                     _row(
                       _field(
                         _discountCtrl,
                         'Discount',
                         '0.00',
                         keyboard: TextInputType.number,
+                        focusNode: _discountFocus,
+                        inputAction: TextInputAction.next,
+                        onSubmitted: (_) => _notesFocus.requestFocus(),
                       ),
                       _netBox(),
                     ),
                     const SizedBox(height: 12),
-                    // Notes + Save button
                     _notesRow(),
                     const SizedBox(height: 24),
                   ],
@@ -746,10 +814,16 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
     String label,
     String hint, {
     TextInputType keyboard = TextInputType.text,
+    FocusNode? focusNode,
+    TextInputAction? inputAction,
+    void Function(String)? onSubmitted,
   }) => _Card(
     child: TextField(
       controller: ctrl,
       keyboardType: keyboard,
+      focusNode: focusNode,
+      textInputAction: inputAction,
+      onSubmitted: onSubmitted,
       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
       decoration: InputDecoration(
         labelText: label,
@@ -791,7 +865,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
           const SizedBox(height: 6),
           ValueListenableBuilder<double>(
             valueListenable: _netNotifier,
-            builder: (_, net, _) => Text(
+            builder: (context, net, child) => Text(
               '৳${net.toStringAsFixed(2)}',
               style: const TextStyle(
                 fontSize: 16,
@@ -812,6 +886,11 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
         Expanded(
           child: TextField(
             controller: _notesCtrl,
+            focusNode: _notesFocus,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) {
+              if (_saveEnabledNotifier.value) _onSaveTapped();
+            },
             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
             decoration: InputDecoration(
               labelText: 'Notes',
@@ -839,10 +918,10 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
           padding: const EdgeInsets.only(right: 8),
           child: ValueListenableBuilder<bool>(
             valueListenable: _saveEnabledNotifier,
-            builder: (_, enabled, _) => _BlackBtn(
+            builder: (context, enabled, child) => _BlackBtn(
               label: 'Save',
               enabled: enabled,
-              onTap: _onSaveTapped, // ← calls _onSaveTapped
+              onTap: _onSaveTapped,
             ),
           ),
         ),

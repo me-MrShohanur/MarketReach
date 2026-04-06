@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:marketing/constants/routes.dart';
 import 'package:marketing/services/auth_service.dart';
 import 'package:marketing/services/provider/current_user.dart';
+import 'package:marketing/utilities/show_error_dialog.dart';
 import 'package:marketing/widgets/app_text.dart';
 
 class LoginView extends StatefulWidget {
@@ -14,9 +15,7 @@ class LoginView extends StatefulWidget {
 class _LoginViewState extends State<LoginView> {
   late final TextEditingController _email;
   late final TextEditingController _password;
-
   late final _formKey = GlobalKey<FormState>();
-
   late final FocusNode _passwordF;
   late final FocusNode loginF;
 
@@ -43,39 +42,27 @@ class _LoginViewState extends State<LoginView> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
-
-    setState(() {
-      _loading = true;
-    });
+    setState(() => _loading = true);
 
     try {
-      // Note: your field is called _email, but API uses "userName" (phone number)
       final success = await AuthService().login(
         _email.text.trim(),
         _password.text.trim(),
         context,
       );
-      if (success) {
-        await CurrentUser.load(); // ✅ load user into memory
-        // your navigation code here
-      }
 
+      if (!success) return;
+
+      await CurrentUser.load();
       if (!mounted) return;
 
-      // Success → go to home and clear back stack
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        homeRoute, // make sure homeRoute is defined in routes.dart
-        (route) => false,
-      );
+      Navigator.pushNamedAndRemoveUntil(context, homeRoute, (route) => false);
     } catch (e) {
       if (!mounted) return;
-
       String errorMsg = e.toString();
       if (errorMsg.contains('Exception:')) {
         errorMsg = errorMsg.replaceFirst('Exception: ', '');
       }
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(errorMsg),
@@ -84,11 +71,7 @@ class _LoginViewState extends State<LoginView> {
         ),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _loading = false;
-        });
-      }
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -106,7 +89,6 @@ class _LoginViewState extends State<LoginView> {
               children: [
                 const SizedBox(height: 56),
 
-                // Logo
                 Container(
                   width: 44,
                   height: 44,
@@ -125,7 +107,6 @@ class _LoginViewState extends State<LoginView> {
 
                 const AppText(
                   'Sign in',
-
                   size: 28,
                   fontWeight: FontWeight.w700,
                   letterSpacing: -0.5,
@@ -139,40 +120,37 @@ class _LoginViewState extends State<LoginView> {
 
                 const SizedBox(height: 32),
 
+                // ── Email field — Enter moves to password ─────────────────
                 _buildField(
                   controller: _email,
                   label: 'Email or Phone',
                   hint: 'you@company.com',
                   keyboardType: TextInputType.emailAddress,
-                  // validator: (v) {
-                  //   if (v == null || v.isEmpty)
-                  //     return 'Enter your email or phone';
-                  //   if (!v.contains('@'))
-                  //     return 'Enter a valid email or phone number';
-                  //   return null;
-                  // },
+                  textInputAction: TextInputAction.next,
+                  onFieldSubmitted: (_) => _passwordF.requestFocus(),
                 ),
+
                 const SizedBox(height: 14),
+
+                // ── Password field — Enter triggers login ─────────────────
                 _buildField(
                   controller: _password,
                   label: 'Password',
                   hint: '••••••••',
-                  obscure: _isShow,
+                  focusNode: _passwordF,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) => _submit(),
+                  obscure: !_isShow,
                   suffix: GestureDetector(
                     onTap: () => setState(() => _isShow = !_isShow),
                     child: Icon(
                       _isShow
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
                       color: Colors.grey,
                       size: 20,
                     ),
                   ),
-                  // validator: (v) {
-                  //   if (v == null || v.isEmpty) return 'Enter your password';
-                  //   if (v.length < 6) return 'Minimum 6 characters';
-                  //   return null;
-                  // },
                 ),
 
                 const SizedBox(height: 10),
@@ -237,13 +215,11 @@ class _LoginViewState extends State<LoginView> {
                       color: Colors.grey,
                       size: 14,
                     ),
-
                     GestureDetector(
-                      onTap: () => Navigator.of(
-                        context,
-                      ).pushNamedAndRemoveUntil(registerRoute, (r) => false),
+                      onTap: () =>
+                          showErrorDialog(context, 'Contact with: 01715088959'),
                       child: const AppText(
-                        'Register',
+                        'Contact us',
                         size: 14,
                         fontWeight: FontWeight.w600,
                         color: Colors.blueAccent,
@@ -263,6 +239,9 @@ class _LoginViewState extends State<LoginView> {
     required TextEditingController controller,
     required String label,
     required String hint,
+    FocusNode? focusNode,
+    TextInputAction? textInputAction,
+    void Function(String)? onFieldSubmitted,
     TextInputType? keyboardType,
     bool obscure = false,
     Widget? suffix,
@@ -281,6 +260,9 @@ class _LoginViewState extends State<LoginView> {
           obscureText: obscure,
           keyboardType: keyboardType,
           validator: validator,
+          focusNode: focusNode, // ← was missing
+          textInputAction: textInputAction, // ← was missing
+          onFieldSubmitted: onFieldSubmitted, // ← was missing
           style: const TextStyle(fontSize: 15),
           decoration: InputDecoration(
             hintText: hint,

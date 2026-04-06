@@ -3,6 +3,7 @@ import 'package:marketing/constants/routes.dart';
 import 'package:marketing/services/provider/current_user.dart';
 import 'package:marketing/views/home/subpages/create_order_view.dart';
 import 'package:marketing/views/home/navigator_view.dart';
+import 'package:marketing/views/home/subpages/pending_order.dart';
 import 'package:marketing/views/login-register/app_startup.dart';
 import 'package:marketing/views/login-register/login.dart';
 import 'package:marketing/views/login-register/register.dart';
@@ -27,6 +28,7 @@ class MyApp extends StatelessWidget {
         registerRoute: (context) => const RegisterView(),
         homeRoute: (context) => const NavigatorView(),
         createOrderRoute: (context) => const CreateOrderView(),
+        pendingOrdersRoute: (context) => const PendingOrdersView(),
       },
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),

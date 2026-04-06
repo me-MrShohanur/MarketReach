@@ -1,22 +1,18 @@
-
-
-
 class BaseUrl {
   static const String apiBase = 'http://103.125.253.59:1122';
   static const String TOKEN = 'Token';
-
 }
 
 class V {
   static const String v1 = 'v1';
 }
+
 class EndPoint {
   static const String login = 'Auth/Login';
   static const String getCustomer = 'Order/GetCustomer';
   static const String getProducts = 'Order/GetProducts';
+  static const String getOrder = 'Order/PlaceOrder';
+  static const String getOrderList = 'Order/GetOrderList';
 
-
-
-
-// 'Order/GetCustomer?companyId=122&type=2&empId=5892&userId=3631&customerId=0';
+  // 'Order/GetCustomer?companyId=122&type=2&empId=5892&userId=3631&customerId=0';
 }
