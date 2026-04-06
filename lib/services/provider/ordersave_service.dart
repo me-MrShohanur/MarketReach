@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 import 'package:http/http.dart' as http;
+import 'package:marketing/constants/api_values.dart';
 import 'package:marketing/services/models/products_model.dart';
 import 'package:marketing/services/provider/current_user.dart';
 
@@ -53,7 +54,7 @@ class OrderSaveService {
     final double vatAmount = tax;
     final double netPayable = netAmount + vatAmount;
 
-    final uri = Uri.parse('$_baseUrl/Order/Save');
+    final uri = Uri.parse('${BaseUrl.apiBase}/api/${V.v1}/${EndPoint.save}');
     final request = http.MultipartRequest('POST', uri);
 
     request.headers['accept'] = '*/*';

@@ -13,6 +13,7 @@ class EndPoint {
   static const String getProducts = 'Order/GetProducts';
   static const String getOrder = 'Order/PlaceOrder';
   static const String getOrderList = 'Order/GetOrderList';
+  static const String save = 'Order/Save';
 
   // 'Order/GetCustomer?companyId=122&type=2&empId=5892&userId=3631&customerId=0';
 }

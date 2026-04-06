@@ -539,6 +539,11 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
   final _discountFocus = FocusNode();
   final _notesFocus = FocusNode();
 
+  // ── NEW: Left / Right toggle state ───────────────────────────────────────
+  bool _isLeft = false;
+  bool _isRight = false;
+  // ─────────────────────────────────────────────────────────────────────────
+
   double get _qty => double.tryParse(_qtyCtrl.text) ?? 0;
   double get _rate => double.tryParse(_rateCtrl.text) ?? 0;
   double get _disc => double.tryParse(_discountCtrl.text) ?? 0;
@@ -604,14 +609,16 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
       name: 'DetailSheet.save',
     );
 
-    // Step 1: add product to cart first
+    // ── NEW: Log Left / Right button states on save ───────────────────────
+    log(
+      'Side buttons — Left: $_isLeft | Right: $_isRight',
+      name: 'DetailSheet.save',
+    );
+    // ─────────────────────────────────────────────────────────────────────
+
     widget.onSave(cartProduct);
 
-    // Step 2: close both sheets at once safely.
-    // popUntil pops routes until it finds a PageRoute (a real screen).
-    // Bottom sheets are ModalBottomSheetRoute — NOT PageRoute.
-    // So this pops: _AddProductDetailSheet + AddProductsSheet
-    // and stops at CreateOrderView. Works whether search was active or not.
+    // Pop both bottom sheets, land back on CreateOrderView.
     Navigator.of(context).popUntil((route) => route is PageRoute);
   }
 
@@ -789,6 +796,8 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
                       _netBox(),
                     ),
                     const SizedBox(height: 12),
+                    _sideToggleRow(),
+                    const SizedBox(height: 12), // ← gap before new row
                     _notesRow(),
                     const SizedBox(height: 24),
                   ],
@@ -928,4 +937,94 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
       ],
     ),
   );
+
+  // ── NEW: Left / Right toggle row ──────────────────────────────────────────
+  Widget _sideToggleRow() => _Card(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          const Text(
+            'Side',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.black45,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: StatefulBuilder(
+              builder: (context, localSet) => Row(
+                children: [
+                  // Left button
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => localSet(() => _isLeft = !_isLeft),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _isLeft ? Colors.black : Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: _isLeft
+                                ? Colors.black
+                                : const Color(0xFFE0E0E0),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Left',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _isLeft ? Colors.white : Colors.black54,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Right button
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => localSet(() => _isRight = !_isRight),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          color: _isRight ? Colors.black : Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: _isRight
+                                ? Colors.black
+                                : const Color(0xFFE0E0E0),
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          'Right',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _isRight ? Colors.white : Colors.black54,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+  // ─────────────────────────────────────────────────────────────────────────
 }
