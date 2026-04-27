@@ -1,0 +1,11 @@
+
+Marketting
+
+{
+  "fromDate": "20",
+  "toDate": "string",
+  "compId": CurrentUser.compId,
+  "userID":  CurrentUser.userId,
+  "partyId": CurrentUser.customerID,
+  "orderType": CurrentUser.userTypeId
+}

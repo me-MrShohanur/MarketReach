@@ -4,8 +4,6 @@ import 'package:marketing/bloc/customer/customer_provider.dart';
 import 'package:marketing/services/models/customer.dart';
 
 // ─── Customer Dropdown Card ───────────────────────────────────────────────────
-// Drop-in replacement for the old _CustomerCard widget in CreateOrderView.
-// Wrap your CreateOrderView (or a parent) with BlocProvider<CustomerBloc>.
 
 class CustomerDropdownCard extends StatefulWidget {
   const CustomerDropdownCard({super.key});
@@ -62,15 +60,23 @@ class _CustomerDropdownCardState extends State<CustomerDropdownCard> {
     setState(() => _isOpen = true);
   }
 
-  void _closeDropdown() {
+  /// Removes the overlay entry and optionally updates [_isOpen].
+  /// During [dispose] we must NOT call [setState] — pass [updateState: false].
+  void _closeDropdown({bool updateState = true}) {
     _overlayEntry?.remove();
     _overlayEntry = null;
-    if (mounted) setState(() => _isOpen = false);
+    if (updateState && mounted) {
+      setState(() => _isOpen = false);
+    } else {
+      // Keep the field in sync without setState so reads after dispose are safe.
+      _isOpen = false;
+    }
   }
 
   @override
   void dispose() {
-    _closeDropdown();
+    // ✅ Never call setState here — the element is already being torn down.
+    _closeDropdown(updateState: false);
     super.dispose();
   }
 
@@ -330,7 +336,7 @@ class _DropdownOverlayState extends State<_DropdownOverlay> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Container(
-      width: screenWidth - 48, // matches 24px horizontal padding each side
+      width: screenWidth - 48,
       constraints: const BoxConstraints(maxHeight: 300),
       decoration: BoxDecoration(
         color: Colors.white,

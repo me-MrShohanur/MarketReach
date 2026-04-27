@@ -19,9 +19,7 @@ class _Card extends StatelessWidget {
     decoration: BoxDecoration(
       color: Colors.white,
       borderRadius: BorderRadius.circular(radius),
-      border: accent != null
-          ? Border(left: BorderSide(color: accent!, width: 3))
-          : null,
+      border: accent != null ? Border.all(color: accent!, width: 1.5) : null,
       boxShadow: const [
         BoxShadow(
           color: Color(0x0D000000),
@@ -102,68 +100,25 @@ class _DragHandle extends StatelessWidget {
   );
 }
 
-class _SheetHeader extends StatelessWidget {
-  final String subtitle;
-  final String title;
-  final Widget badge;
-
-  const _SheetHeader({
-    required this.subtitle,
-    required this.title,
-    required this.badge,
-  });
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 24),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              subtitle,
-              style: const TextStyle(
-                fontSize: 13,
-                color: Colors.black45,
-                letterSpacing: 0.2,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.5,
-              ),
-            ),
-          ],
-        ),
-        badge,
-      ],
-    ),
-  );
-}
-
-// ─── Add Products Sheet ───────────────────────────────────────────────────────
+// ─── Add Products Sheet (entry point) ────────────────────────────────────────
 
 class AddProductsSheet extends StatelessWidget {
   final int categoryId;
-  final ValueChanged<ProductModel> onProductAdded;
+  final int partyId;
+  final ValueChanged<List<ProductModel>> onProductsAdded;
 
   const AddProductsSheet({
     super.key,
     required this.categoryId,
-    required this.onProductAdded,
+    required this.partyId,
+    required this.onProductsAdded,
   });
 
   static void show(
     BuildContext context, {
     required int partyId,
     required int categoryId,
-    required ValueChanged<ProductModel> onProductAdded,
+    required ValueChanged<List<ProductModel>> onProductsAdded,
   }) {
     showModalBottomSheet(
       context: context,
@@ -175,7 +130,8 @@ class AddProductsSheet extends StatelessWidget {
               ..add(FetchProducts(getPartyId: partyId, categoryId: categoryId)),
         child: AddProductsSheet(
           categoryId: categoryId,
-          onProductAdded: onProductAdded,
+          partyId: partyId,
+          onProductsAdded: onProductsAdded,
         ),
       ),
     );
@@ -187,7 +143,7 @@ class AddProductsSheet extends StatelessWidget {
     child: DraggableScrollableSheet(
       initialChildSize: 0.9,
       minChildSize: 0.4,
-      maxChildSize: 0.92,
+      maxChildSize: 0.95,
       expand: false,
       snap: true,
       snapSizes: const [0.5, 0.9],
@@ -196,7 +152,10 @@ class AddProductsSheet extends StatelessWidget {
           color: Color(0xFFF5F5F5),
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
-        child: _SheetBody(scrollController: sc, onProductAdded: onProductAdded),
+        child: _SheetBody(
+          scrollController: sc,
+          onProductsAdded: onProductsAdded,
+        ),
       ),
     ),
   );
@@ -206,11 +165,11 @@ class AddProductsSheet extends StatelessWidget {
 
 class _SheetBody extends StatefulWidget {
   final ScrollController scrollController;
-  final ValueChanged<ProductModel> onProductAdded;
+  final ValueChanged<List<ProductModel>> onProductsAdded;
 
   const _SheetBody({
     required this.scrollController,
-    required this.onProductAdded,
+    required this.onProductsAdded,
   });
 
   @override
@@ -219,6 +178,9 @@ class _SheetBody extends StatefulWidget {
 
 class _SheetBodyState extends State<_SheetBody> {
   final _searchNotifier = ValueNotifier<String>('');
+
+  /// productId → configured ProductModel (preserves selection across searches)
+  final Map<String, ProductModel> _selectedProducts = {};
 
   @override
   void dispose() {
@@ -233,29 +195,89 @@ class _SheetBodyState extends State<_SheetBody> {
             .where((p) => p.name.toLowerCase().contains(query.toLowerCase()))
             .toList();
 
+  void _onProductConfigured(ProductModel configured) {
+    setState(() {
+      _selectedProducts[configured.name] = configured;
+    });
+    log(
+      'Configured: ${configured.name} | qty=${configured.cartQty} | net=${configured.cartNetAmount}',
+      name: 'MultiSelect',
+    );
+  }
+
+  void _removeSelected(String productName) {
+    setState(() => _selectedProducts.remove(productName));
+  }
+
+  void _addToOrder() {
+    if (_selectedProducts.isEmpty) return;
+    widget.onProductsAdded(_selectedProducts.values.toList());
+    Navigator.of(context).popUntil((route) => route is PageRoute);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final selectedCount = _selectedProducts.length;
+
     return Column(
       children: [
         const _DragHandle(),
-        _SheetHeader(
-          subtitle: 'Browse',
-          title: 'Products',
-          badge: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: Colors.black,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.qr_code_scanner_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
+
+        // ── Header ──────────────────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Browse',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.black45,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Products',
+                    style: TextStyle(
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x0F000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: Colors.black54,
+                  size: 22,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 20),
+
+        const SizedBox(height: 16),
+
+        // ── Search bar ──────────────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: _Card(
@@ -284,7 +306,61 @@ class _SheetBodyState extends State<_SheetBody> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+
+        const SizedBox(height: 12),
+
+        // ── Selected products horizontal chip strip ──────────────────────────
+        AnimatedSize(
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeInOut,
+          child: selectedCount == 0
+              ? const SizedBox.shrink()
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            size: 14,
+                            color: Color(0xFF4CAF50),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '$selectedCount selected',
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.black54,
+                              letterSpacing: -0.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      height: 72,
+                      child: ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        itemCount: _selectedProducts.length,
+                        itemBuilder: (_, i) {
+                          final product = _selectedProducts.values.elementAt(i);
+                          return _SelectedChip(
+                            product: product,
+                            onRemove: () => _removeSelected(product.name),
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ),
+        ),
+
+        // ── Product list ─────────────────────────────────────────────────────
         Expanded(
           child: BlocBuilder<ProductBloc, ProductState>(
             buildWhen: (prev, curr) =>
@@ -312,7 +388,7 @@ class _SheetBodyState extends State<_SheetBody> {
               if (state is ProductLoaded) {
                 return ValueListenableBuilder<String>(
                   valueListenable: _searchNotifier,
-                  builder: (context, query, child) {
+                  builder: (context, query, _) {
                     final filtered = _filtered(state.products, query);
                     if (filtered.isEmpty) return const _EmptySearch();
 
@@ -323,13 +399,21 @@ class _SheetBodyState extends State<_SheetBody> {
                         vertical: 4,
                       ),
                       itemCount: filtered.length,
-                      itemBuilder: (context, i) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: _ProductTile(
-                          product: filtered[i],
-                          onProductAdded: widget.onProductAdded,
-                        ),
-                      ),
+                      itemBuilder: (context, i) {
+                        final product = filtered[i];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _ProductTile(
+                            product: product,
+                            isSelected: _selectedProducts.containsKey(
+                              product.name,
+                            ),
+                            selectedProduct: _selectedProducts[product.name],
+                            onProductConfigured: _onProductConfigured,
+                            onRemove: () => _removeSelected(product.name),
+                          ),
+                        );
+                      },
                     );
                   },
                 );
@@ -339,7 +423,138 @@ class _SheetBodyState extends State<_SheetBody> {
             },
           ),
         ),
+
+        // ── Bottom "Add to Order" CTA — only visible when items selected ─────
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
+          child: selectedCount == 0
+              ? const SizedBox.shrink()
+              : Container(
+                  color: const Color(0xFFF5F5F5),
+                  padding: EdgeInsets.fromLTRB(
+                    24,
+                    12,
+                    24,
+                    12 + MediaQuery.of(context).padding.bottom,
+                  ),
+                  child: GestureDetector(
+                    onTap: _addToOrder,
+                    child: Container(
+                      width: double.infinity,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x26000000),
+                            blurRadius: 12,
+                            offset: Offset(0, 6),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Add $selectedCount item${selectedCount == 1 ? '' : 's'} to Order',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              letterSpacing: -0.1,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+        ),
       ],
+    );
+  }
+}
+
+// ─── Selected Chip (horizontal strip) ────────────────────────────────────────
+
+class _SelectedChip extends StatelessWidget {
+  final ProductModel product;
+  final VoidCallback onRemove;
+
+  const _SelectedChip({required this.product, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(right: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF4CAF50), width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                product.name.length > 14
+                    ? '${product.name.substring(0, 14)}…'
+                    : product.name,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${product.cartQty.toStringAsFixed(0)} × ৳${product.cartRate.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF4CAF50),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onRemove,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFFEBEE),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.close_rounded,
+                size: 11,
+                color: Colors.redAccent,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -412,94 +627,222 @@ class _EmptySearch extends StatelessWidget {
 
 class _ProductTile extends StatelessWidget {
   final ProductModel product;
-  final ValueChanged<ProductModel> onProductAdded;
+  final bool isSelected;
+  final ProductModel? selectedProduct;
+  final ValueChanged<ProductModel> onProductConfigured;
+  final VoidCallback onRemove;
 
-  const _ProductTile({required this.product, required this.onProductAdded});
+  const _ProductTile({
+    required this.product,
+    required this.isSelected,
+    required this.selectedProduct,
+    required this.onProductConfigured,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return _Card(
-      accent: const Color(0xFF2196F3),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product.name,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: -0.2,
+    // ✅ FIX: Use Stack + Positioned for the blue left accent bar instead of
+    // Border(left: ...) which crashes when combined with borderRadius.
+    return Stack(
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeInOut,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            // ✅ Always a uniform border — no crash
+            border: isSelected
+                ? Border.all(color: const Color(0xFF4CAF50), width: 1.5)
+                : Border.all(color: Colors.transparent, width: 1.5),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0D000000),
+                blurRadius: 10,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    // Green check badge when selected
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: isSelected
+                          ? Container(
+                              key: const ValueKey('check'),
+                              width: 28,
+                              height: 28,
+                              margin: const EdgeInsets.only(right: 10),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFE8F5E9),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.check_rounded,
+                                size: 16,
+                                color: Color(0xFF4CAF50),
+                              ),
+                            )
+                          : const SizedBox(key: ValueKey('empty')),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text(
-                        product.salePrice != null
-                            ? '৳${product.salePrice!.toStringAsFixed(2)}'
-                            : 'Price N/A',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: product.salePrice != null
+
+                    // Product name + price
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            product.name,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Text(
+                                product.salePrice != null
+                                    ? '৳${product.salePrice!.toStringAsFixed(2)}'
+                                    : 'Price N/A',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: product.salePrice != null
+                                      ? const Color(0xFF4CAF50)
+                                      : Colors.black38,
+                                ),
+                              ),
+                              if (product.discountRate > 0) ...[
+                                const SizedBox(width: 6),
+                                Container(
+                                  width: 3,
+                                  height: 3,
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black26,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '${product.discountRate}% off',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.orangeAccent,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(width: 10),
+
+                    // Add (+) or Edit (pencil) button
+                    GestureDetector(
+                      onTap: () => _AddProductDetailSheet.show(
+                        context,
+                        product: selectedProduct ?? product,
+                        onSave: onProductConfigured,
+                      ),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 220),
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: isSelected
                               ? const Color(0xFF4CAF50)
-                              : Colors.black38,
+                              : Colors.black,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          isSelected ? Icons.edit_rounded : Icons.add_rounded,
+                          color: Colors.white,
+                          size: 18,
                         ),
                       ),
-                      if (product.discountRate > 0) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          width: 3,
-                          height: 3,
-                          decoration: const BoxDecoration(
-                            color: Colors.black26,
-                            shape: BoxShape.circle,
-                          ),
+                    ),
+                  ],
+                ),
+
+                // Configured summary row — shown only when product is selected
+                if (isSelected && selectedProduct != null) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1FBF4),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.shopping_cart_outlined,
+                          size: 13,
+                          color: Color(0xFF4CAF50),
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          '${product.discountRate}% off',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Colors.orangeAccent,
-                            fontWeight: FontWeight.w500,
+                        Expanded(
+                          child: Text(
+                            '${selectedProduct!.cartQty.toStringAsFixed(0)} qty'
+                            '  ×  ৳${selectedProduct!.cartRate.toStringAsFixed(2)}'
+                            '  =  ৳${selectedProduct!.cartNetAmount.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2E7D32),
+                              letterSpacing: -0.1,
+                            ),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: onRemove,
+                          child: const Icon(
+                            Icons.close_rounded,
+                            size: 14,
+                            color: Colors.redAccent,
                           ),
                         ),
                       ],
-                    ],
+                    ),
                   ),
                 ],
-              ),
+              ],
             ),
-            const SizedBox(width: 10),
-            GestureDetector(
-              onTap: () => _AddProductDetailSheet.show(
-                context,
-                product: product,
-                onSave: onProductAdded,
-              ),
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.add_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+
+        // ✅ Blue left accent bar — painted via Stack instead of Border(left:)
+        // This avoids the "borderRadius can only be given on uniform borders" crash.
+        if (!isSelected)
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(14),
+                bottomLeft: Radius.circular(14),
+              ),
+              child: Container(width: 3, color: const Color(0xFF2196F3)),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -530,19 +873,12 @@ class _AddProductDetailSheet extends StatefulWidget {
 }
 
 class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
-  final _qtyCtrl = TextEditingController();
-  final _rateCtrl = TextEditingController();
-  final _discountCtrl = TextEditingController();
+  late final TextEditingController _qtyCtrl;
+  late final TextEditingController _rateCtrl;
+  late final TextEditingController _discountCtrl;
   final _notesCtrl = TextEditingController();
 
-  final _rateFocus = FocusNode();
-  final _discountFocus = FocusNode();
   final _notesFocus = FocusNode();
-
-  // ── NEW: Left / Right toggle state ───────────────────────────────────────
-  bool _isLeft = false;
-  bool _isRight = false;
-  // ─────────────────────────────────────────────────────────────────────────
 
   double get _qty => double.tryParse(_qtyCtrl.text) ?? 0;
   double get _rate => double.tryParse(_rateCtrl.text) ?? 0;
@@ -555,21 +891,30 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
   @override
   void initState() {
     super.initState();
-    _qtyCtrl.text = widget.product.depoDiscount.toStringAsFixed(2);
-    _rateCtrl.text = (widget.product.salePrice ?? 0).toStringAsFixed(2);
-    _discountCtrl.text = widget.product.discountRate.toStringAsFixed(2);
+
+    final p = widget.product;
+
+    _qtyCtrl = TextEditingController(
+      text: p.cartQty > 0 ? p.cartQty.toStringAsFixed(0) : '',
+    );
+    _rateCtrl = TextEditingController(
+      text: (p.cartRate > 0 ? p.cartRate : (p.salePrice ?? 0)).toStringAsFixed(
+        2,
+      ),
+    );
+    _discountCtrl = TextEditingController(
+      text: (p.cartDiscount > 0 ? p.cartDiscount : p.discountRate)
+          .toStringAsFixed(2),
+    );
+    if (p.cartNotes.isNotEmpty) _notesCtrl.text = p.cartNotes;
 
     _netNotifier = ValueNotifier(_net);
     _saveEnabledNotifier = ValueNotifier(_qty > 0);
 
-    for (final c in [_qtyCtrl, _rateCtrl, _discountCtrl]) {
-      c.addListener(_onFieldChanged);
-    }
+    _qtyCtrl.addListener(_onFieldChanged);
 
     log(
-      'depoDiscount: ${widget.product.depoDiscount} | '
-      'salePrice: ${widget.product.salePrice} | '
-      'discountRate: ${widget.product.discountRate}',
+      'DetailSheet open — ${p.name} | cartQty=${p.cartQty} | salePrice=${p.salePrice}',
       name: 'DetailSheet.prefill',
     );
   }
@@ -585,8 +930,6 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
     _rateCtrl.dispose();
     _discountCtrl.dispose();
     _notesCtrl.dispose();
-    _rateFocus.dispose();
-    _discountFocus.dispose();
     _notesFocus.dispose();
     _netNotifier.dispose();
     _saveEnabledNotifier.dispose();
@@ -603,23 +946,13 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
     );
 
     log(
-      'Saving to cart — product: ${cartProduct.name} | '
-      'qty: ${cartProduct.cartQty} | rate: ${cartProduct.cartRate} | '
-      'net: ${cartProduct.cartNetAmount}',
+      'Saving — ${cartProduct.name} | qty=${cartProduct.cartQty} | net=${cartProduct.cartNetAmount}',
       name: 'DetailSheet.save',
     );
-
-    // ── NEW: Log Left / Right button states on save ───────────────────────
-    log(
-      'Side buttons — Left: $_isLeft | Right: $_isRight',
-      name: 'DetailSheet.save',
-    );
-    // ─────────────────────────────────────────────────────────────────────
 
     widget.onSave(cartProduct);
 
-    // Pop both bottom sheets, land back on CreateOrderView.
-    Navigator.of(context).popUntil((route) => route is PageRoute);
+    Navigator.of(context).pop();
   }
 
   @override
@@ -649,6 +982,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
             children: [
               const _DragHandle(),
 
+              // ── Product header ─────────────────────────────────────────────
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
                 child: Column(
@@ -758,6 +1092,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
 
               const SizedBox(height: 20),
 
+              // ── Input fields ───────────────────────────────────────────────
               Expanded(
                 child: ListView(
                   controller: sc,
@@ -767,19 +1102,17 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
                       _field(
                         _qtyCtrl,
                         'Quantity',
-                        '0',
+                        'Enter qty',
                         keyboard: TextInputType.number,
                         inputAction: TextInputAction.next,
-                        onSubmitted: (_) => _rateFocus.requestFocus(),
+                        onSubmitted: (_) => _notesFocus.requestFocus(),
                       ),
                       _field(
                         _rateCtrl,
                         'Rate',
                         '0.00',
                         keyboard: TextInputType.number,
-                        focusNode: _rateFocus,
-                        inputAction: TextInputAction.next,
-                        onSubmitted: (_) => _discountFocus.requestFocus(),
+                        readOnly: true,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -789,15 +1122,11 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
                         'Discount',
                         '0.00',
                         keyboard: TextInputType.number,
-                        focusNode: _discountFocus,
-                        inputAction: TextInputAction.next,
-                        onSubmitted: (_) => _notesFocus.requestFocus(),
+                        readOnly: true,
                       ),
                       _netBox(),
                     ),
                     const SizedBox(height: 12),
-                    _sideToggleRow(),
-                    const SizedBox(height: 12), // ← gap before new row
                     _notesRow(),
                     const SizedBox(height: 24),
                   ],
@@ -826,6 +1155,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
     FocusNode? focusNode,
     TextInputAction? inputAction,
     void Function(String)? onSubmitted,
+    bool readOnly = false,
   }) => _Card(
     child: TextField(
       controller: ctrl,
@@ -833,7 +1163,12 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
       focusNode: focusNode,
       textInputAction: inputAction,
       onSubmitted: onSubmitted,
-      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+      readOnly: readOnly,
+      style: TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        color: readOnly ? Colors.black38 : Colors.black,
+      ),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: const TextStyle(
@@ -852,7 +1187,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
           borderSide: BorderSide.none,
         ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: readOnly ? const Color(0xFFF5F5F5) : Colors.white,
       ),
     ),
   );
@@ -874,7 +1209,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
           const SizedBox(height: 6),
           ValueListenableBuilder<double>(
             valueListenable: _netNotifier,
-            builder: (context, net, child) => Text(
+            builder: (_, net, _) => Text(
               '৳${net.toStringAsFixed(2)}',
               style: const TextStyle(
                 fontSize: 16,
@@ -927,7 +1262,7 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
           padding: const EdgeInsets.only(right: 8),
           child: ValueListenableBuilder<bool>(
             valueListenable: _saveEnabledNotifier,
-            builder: (context, enabled, child) => _BlackBtn(
+            builder: (_, enabled, _) => _BlackBtn(
               label: 'Save',
               enabled: enabled,
               onTap: _onSaveTapped,
@@ -937,94 +1272,4 @@ class _AddProductDetailSheetState extends State<_AddProductDetailSheet> {
       ],
     ),
   );
-
-  // ── NEW: Left / Right toggle row ──────────────────────────────────────────
-  Widget _sideToggleRow() => _Card(
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Row(
-        children: [
-          const Text(
-            'Side',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.black45,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: StatefulBuilder(
-              builder: (context, localSet) => Row(
-                children: [
-                  // Left button
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => localSet(() => _isLeft = !_isLeft),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeInOut,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: _isLeft ? Colors.black : Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: _isLeft
-                                ? Colors.black
-                                : const Color(0xFFE0E0E0),
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'Left',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _isLeft ? Colors.white : Colors.black54,
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  // Right button
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => localSet(() => _isRight = !_isRight),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        curve: Curves.easeInOut,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          color: _isRight ? Colors.black : Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: _isRight
-                                ? Colors.black
-                                : const Color(0xFFE0E0E0),
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          'Right',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: _isRight ? Colors.white : Colors.black54,
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-  // ─────────────────────────────────────────────────────────────────────────
 }

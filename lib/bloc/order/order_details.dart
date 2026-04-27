@@ -254,7 +254,7 @@ class OrderDetailBloc extends Bloc<OrderDetailEvent, OrderDetailState> {
       final response = await http.get(
         uri,
         headers: {
-          'Authorization': 'Bearer ${CurrentUser.token}',
+          'Authorization': 'Bearer ${CurrentUser.customerID}',
           'accept': '*/*',
         },
       );
