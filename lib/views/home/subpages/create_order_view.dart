@@ -1,3 +1,5 @@
+// lib/views/home/subpages/create_order_view.dart
+
 import 'dart:developer';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -31,9 +33,9 @@ class _CreateOrderViewState extends State<CreateOrderView> {
   bool _customerSelected = false;
   int? _selectedPartyId;
 
-  // ── New delivery fields ───────────────────────────────────────────────────
   final TextEditingController _deliveryContactCtrl = TextEditingController();
   final TextEditingController _deliveryAddressCtrl = TextEditingController();
+  bool _isDeliveryExpanded = false;
 
   static const _orderStatuses = [
     'Pending',
@@ -69,6 +71,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
       _selectedPartyId = null;
       _deliveryContactCtrl.clear();
       _deliveryAddressCtrl.clear();
+      _isDeliveryExpanded = false;
     });
   }
 
@@ -149,8 +152,6 @@ class _CreateOrderViewState extends State<CreateOrderView> {
   void _removeAttachment(int index) =>
       setState(() => _attachments.removeAt(index));
 
-  // ── Open product browser sheet ────────────────────────────────────────────
-
   void _openSheet() {
     if (!_canAddProducts) return;
     AddProductsSheet.show(
@@ -173,34 +174,28 @@ class _CreateOrderViewState extends State<CreateOrderView> {
     );
   }
 
-  // ── Cheque date picker ────────────────────────────────────────────────────
-
   Future<void> _selectChequeDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
       initialDate: _chequeDate ?? DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(
-              primary: Color(0xFF4CAF50),
-              onPrimary: Colors.white,
-              surface: Colors.white,
-              onSurface: Colors.black,
-            ),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: Color(0xFF4CAF50),
+            onPrimary: Colors.white,
+            surface: Colors.white,
+            onSurface: Colors.black,
           ),
-          child: child!,
-        );
-      },
+        ),
+        child: child!,
+      ),
     );
     if (picked != null && picked != _chequeDate) {
       setState(() => _chequeDate = picked);
     }
   }
-
-  // ── Submit order ──────────────────────────────────────────────────────────
 
   Future<void> _submitOrder() async {
     if (!_canCreateOrder) return;
@@ -275,6 +270,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                   padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
                   child: Column(
                     children: [
+                      // ── Customer Dropdown ───────────────────────────────
                       BlocProvider(
                         create: (_) => CustomerBloc()..add(LoadCustomers()),
                         child: BlocConsumer<CustomerBloc, CustomerState>(
@@ -303,7 +299,10 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                               const CustomerDropdownCard(),
                         ),
                       ),
+
                       const SizedBox(height: 12),
+
+                      // ── Cart ─────────────────────────────────────────────
                       _cart.isEmpty
                           ? _EmptyCart(
                               onAdd: _openSheet,
@@ -315,22 +314,35 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                                   setState(() => _cart.removeAt(i)),
                               onAddMore: _openSheet,
                             ),
-                      const SizedBox(height: 12),
-                      _SummaryCard(
-                        subtotal: _subtotal,
-                        discount: discount,
-                        tax: tax,
-                        total: _total,
-                        onDiscountChanged: (v) => setState(() => discount = v),
-                        onTaxChanged: (v) => setState(() => tax = v),
-                      ),
+
                       const SizedBox(height: 12),
 
-                      // ── Delivery Info Card ──────────────────────────────
+                      // ── Summary — green left accent ───────────────────────
+                      _AccentCard(
+                        accent: const Color(0xFF4CAF50),
+                        child: _SummaryCardContent(
+                          subtotal: _subtotal,
+                          discount: discount,
+                          tax: tax,
+                          total: _total,
+                          onDiscountChanged: (v) =>
+                              setState(() => discount = v),
+                          onTaxChanged: (v) => setState(() => tax = v),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // ── Delivery Info ─────────────────────────────────────
                       _DeliveryInfoCard(
+                        isExpanded: _isDeliveryExpanded,
+                        onToggle: () => setState(() {
+                          _isDeliveryExpanded = !_isDeliveryExpanded;
+                        }),
                         contactCtrl: _deliveryContactCtrl,
                         addressCtrl: _deliveryAddressCtrl,
                       ),
+
                       const SizedBox(height: 12),
 
                       if (_attachments.isNotEmpty)
@@ -340,18 +352,26 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                           onRemove: _removeAttachment,
                         ),
                       if (_attachments.isNotEmpty) const SizedBox(height: 12),
+
+                      // ── Cheque Date — blue left accent ────────────────────
                       _ChequeDateCard(
                         chequeDate: _chequeDate,
                         onTap: _selectChequeDate,
                       ),
+
                       const SizedBox(height: 12),
-                      _StatusDropdown(
-                        label: 'Order Status',
-                        value: orderStatus,
-                        items: _orderStatuses,
+
+                      // ── Status Dropdown — amber left accent ───────────────
+                      _AccentCard(
                         accent: const Color(0xFFFFC107),
-                        onChanged: (v) => setState(() => orderStatus = v!),
+                        child: _StatusDropdownContent(
+                          label: 'Order Status',
+                          value: orderStatus,
+                          items: _orderStatuses,
+                          onChanged: (v) => setState(() => orderStatus = v!),
+                        ),
                       ),
+
                       const SizedBox(height: 16),
                     ],
                   ),
@@ -466,13 +486,204 @@ class _Header extends StatelessWidget {
   }
 }
 
-// ─── Delivery Info Card ───────────────────────────────────────────────────────
+// ─── Accent Card — white card with colored LEFT border (your signature style)
+// Q2 Fix: Uses Border(left: BorderSide(...)) not Border.all()
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AccentCard extends StatelessWidget {
+  final Color accent;
+  final Widget child;
+
+  const _AccentCard({required this.accent, required this.child});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      // ✅ Left-only border — your design system style
+      border: Border(left: BorderSide(color: accent, width: 3)),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x0D000000),
+          blurRadius: 10,
+          offset: Offset(0, 4),
+        ),
+      ],
+    ),
+    child: child,
+  );
+}
+
+// ─── Plain white card (no accent) ────────────────────────────────────────────
+
+class _PlainCard extends StatelessWidget {
+  final Widget child;
+  const _PlainCard({required this.child});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x0D000000),
+          blurRadius: 10,
+          offset: Offset(0, 4),
+        ),
+      ],
+    ),
+    child: child,
+  );
+}
+
+// ─── Summary Card Content (green accent via _AccentCard) ──────────────────────
+
+class _SummaryCardContent extends StatelessWidget {
+  final double subtotal, discount, tax, total;
+  final ValueChanged<double> onDiscountChanged, onTaxChanged;
+
+  const _SummaryCardContent({
+    required this.subtotal,
+    required this.discount,
+    required this.tax,
+    required this.total,
+    required this.onDiscountChanged,
+    required this.onTaxChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Order Summary',
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.black45,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _SummaryRow(
+            label: 'Subtotal',
+            value: '৳${subtotal.toStringAsFixed(2)}',
+          ),
+          const SizedBox(height: 12),
+          _EditableRow(
+            label: 'Discount',
+            value: discount,
+            onChanged: onDiscountChanged,
+          ),
+          const SizedBox(height: 12),
+          _EditableRow(label: 'Tax', value: tax, onChanged: onTaxChanged),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Divider(height: 1, color: Color(0xFFF0F0F0)),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Total',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              Text(
+                '৳${total.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF4CAF50),
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Status Dropdown Content (amber accent via _AccentCard) ───────────────────
+
+class _StatusDropdownContent extends StatelessWidget {
+  final String label, value;
+  final List<String> items;
+  final ValueChanged<String?> onChanged;
+
+  const _StatusDropdownContent({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 11,
+              color: Colors.black45,
+              letterSpacing: 0.2,
+            ),
+          ),
+          const SizedBox(height: 2),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: value,
+              isDense: true,
+              isExpanded: true,
+              icon: const Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 18,
+                color: Colors.black45,
+              ),
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black,
+                letterSpacing: -0.2,
+              ),
+              items: items
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                  .toList(),
+              onChanged: onChanged,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Collapsible Delivery Info Card ──────────────────────────────────────────
 
 class _DeliveryInfoCard extends StatelessWidget {
+  final bool isExpanded;
+  final VoidCallback onToggle;
   final TextEditingController contactCtrl;
   final TextEditingController addressCtrl;
 
   const _DeliveryInfoCard({
+    required this.isExpanded,
+    required this.onToggle,
     required this.contactCtrl,
     required this.addressCtrl,
   });
@@ -495,67 +706,102 @@ class _DeliveryInfoCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Card header ─────────────────────────────────────────────
-            Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3E5F5),
-                    borderRadius: BorderRadius.circular(9),
+      child: Column(
+        children: [
+          GestureDetector(
+            onTap: onToggle,
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3E5F5),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: const Icon(
+                      Icons.local_shipping_outlined,
+                      color: Color(0xFF9C27B0),
+                      size: 17,
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.local_shipping_outlined,
-                    color: Color(0xFF9C27B0),
-                    size: 17,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Delivery Info',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.black45,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        if (!isExpanded &&
+                            (contactCtrl.text.isNotEmpty ||
+                                addressCtrl.text.isNotEmpty))
+                          Text(
+                            contactCtrl.text.isNotEmpty
+                                ? contactCtrl.text
+                                : addressCtrl.text,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF9C27B0),
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                const Text(
-                  'Delivery Info',
-                  style: TextStyle(
-                    fontSize: 13,
+                  Icon(
+                    isExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
                     color: Colors.black45,
-                    letterSpacing: 0.2,
+                    size: 24,
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-            const SizedBox(height: 14),
-
-            // ── Delivery Contact ─────────────────────────────────────────
-            _DeliveryField(
-              controller: contactCtrl,
-              label: 'Delivery Contact',
-              hint: 'Enter contact number',
-              icon: Icons.phone_outlined,
-              iconColor: const Color(0xFF9C27B0),
-              iconBg: const Color(0xFFF3E5F5),
-              keyboardType: TextInputType.phone,
-              inputAction: TextInputAction.next,
+          ),
+          if (isExpanded)
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                children: [
+                  const Divider(height: 1, color: Color(0xFFF0F0F0)),
+                  const SizedBox(height: 14),
+                  _DeliveryField(
+                    controller: contactCtrl,
+                    label: 'Delivery Contact',
+                    hint: 'Enter contact number (optional)',
+                    icon: Icons.phone_outlined,
+                    iconColor: const Color(0xFF9C27B0),
+                    iconBg: const Color(0xFFF3E5F5),
+                    keyboardType: TextInputType.phone,
+                    inputAction: TextInputAction.next,
+                  ),
+                  const SizedBox(height: 12),
+                  _DeliveryField(
+                    controller: addressCtrl,
+                    label: 'Delivery Address',
+                    hint: 'Enter delivery address (optional)',
+                    icon: Icons.location_on_outlined,
+                    iconColor: const Color(0xFF9C27B0),
+                    iconBg: const Color(0xFFF3E5F5),
+                    keyboardType: TextInputType.streetAddress,
+                    inputAction: TextInputAction.done,
+                    maxLines: 2,
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-
-            // ── Delivery Address ─────────────────────────────────────────
-            _DeliveryField(
-              controller: addressCtrl,
-              label: 'Delivery Address',
-              hint: 'Enter delivery address',
-              icon: Icons.location_on_outlined,
-              iconColor: const Color(0xFF9C27B0),
-              iconBg: const Color(0xFFF3E5F5),
-              keyboardType: TextInputType.streetAddress,
-              inputAction: TextInputAction.done,
-              maxLines: 2,
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
@@ -638,7 +884,7 @@ class _DeliveryField extends StatelessWidget {
   }
 }
 
-// ─── Attachment Options Bottom Sheet ─────────────────────────────────────────
+// ─── Attachment Options Sheet ─────────────────────────────────────────────────
 
 class _AttachmentOptionsSheet extends StatelessWidget {
   final VoidCallback onCamera;
@@ -1020,7 +1266,7 @@ class _AttachmentsCard extends StatelessWidget {
   }
 }
 
-// ─── Cheque Date Card ────────────────────────────────────────────────────────
+// ─── Cheque Date Card — blue left accent ──────────────────────────────────────
 
 class _ChequeDateCard extends StatelessWidget {
   final DateTime? chequeDate;
@@ -1083,8 +1329,10 @@ class _ChequeDateCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         chequeDate != null
-                            ? '${chequeDate!.day}/${chequeDate!.month}/${chequeDate!.year}'
-                            : 'Select date',
+                            ? '${chequeDate!.day.toString().padLeft(2, '0')}/'
+                                  '${chequeDate!.month.toString().padLeft(2, '0')}/'
+                                  '${chequeDate!.year}'
+                            : 'Select date (optional)',
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
@@ -1120,7 +1368,7 @@ class _EmptyCart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _Card(
+    return _PlainCard(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 36),
         child: Column(
@@ -1211,7 +1459,7 @@ class _CartList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _Card(
+    return _PlainCard(
       child: Column(
         children: [
           Padding(
@@ -1368,83 +1616,7 @@ class _CartTile extends StatelessWidget {
   }
 }
 
-// ─── Summary Card ─────────────────────────────────────────────────────────────
-
-class _SummaryCard extends StatelessWidget {
-  final double subtotal, discount, tax, total;
-  final ValueChanged<double> onDiscountChanged, onTaxChanged;
-
-  const _SummaryCard({
-    required this.subtotal,
-    required this.discount,
-    required this.tax,
-    required this.total,
-    required this.onDiscountChanged,
-    required this.onTaxChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _Card(
-      accent: const Color(0xFF4CAF50),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Order Summary',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.black45,
-                letterSpacing: 0.2,
-              ),
-            ),
-            const SizedBox(height: 12),
-            _SummaryRow(
-              label: 'Subtotal',
-              value: '৳${subtotal.toStringAsFixed(2)}',
-            ),
-            const SizedBox(height: 12),
-            _EditableRow(
-              label: 'Discount',
-              value: discount,
-              onChanged: onDiscountChanged,
-            ),
-            const SizedBox(height: 12),
-            _EditableRow(label: 'Tax', value: tax, onChanged: onTaxChanged),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12),
-              child: Divider(height: 1, color: Color(0xFFF0F0F0)),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Total',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                Text(
-                  '৳${total.toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF4CAF50),
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// ─── Summary Row / Editable Row helpers ──────────────────────────────────────
 
 class _SummaryRow extends StatelessWidget {
   final String label, value;
@@ -1561,69 +1733,6 @@ class _CurrencyInputState extends State<_CurrencyInput> {
   }
 }
 
-// ─── Status Dropdown ──────────────────────────────────────────────────────────
-
-class _StatusDropdown extends StatelessWidget {
-  final String label, value;
-  final List<String> items;
-  final Color accent;
-  final ValueChanged<String?> onChanged;
-
-  const _StatusDropdown({
-    required this.label,
-    required this.value,
-    required this.items,
-    required this.accent,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _Card(
-      accent: accent,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 11,
-                color: Colors.black45,
-                letterSpacing: 0.2,
-              ),
-            ),
-            const SizedBox(height: 2),
-            DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                value: value,
-                isDense: true,
-                isExpanded: true,
-                icon: const Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 18,
-                  color: Colors.black45,
-                ),
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black,
-                  letterSpacing: -0.2,
-                ),
-                items: items
-                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                    .toList(),
-                onChanged: onChanged,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ─── Bottom Button ────────────────────────────────────────────────────────────
 
 class _BottomButton extends StatelessWidget {
@@ -1691,31 +1800,7 @@ class _BottomButton extends StatelessWidget {
   }
 }
 
-// ─── Shared Primitives ────────────────────────────────────────────────────────
-
-class _Card extends StatelessWidget {
-  final Widget child;
-  final Color? accent;
-  const _Card({required this.child, this.accent});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: double.infinity,
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      border: accent != null ? Border.all(color: accent!, width: 1.5) : null,
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0D000000),
-          blurRadius: 10,
-          offset: Offset(0, 4),
-        ),
-      ],
-    ),
-    child: child,
-  );
-}
+// ─── Icon Button ─────────────────────────────────────────────────────────────
 
 class _IconBtn extends StatelessWidget {
   final IconData icon;
@@ -1744,7 +1829,6 @@ class _IconBtn extends StatelessWidget {
   );
 }
 //-----------------------------------------------------------------
-
 // import 'dart:developer';
 // import 'dart:io';
 // import 'package:flutter/material.dart';

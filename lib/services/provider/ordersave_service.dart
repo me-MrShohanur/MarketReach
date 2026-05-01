@@ -1,5 +1,7 @@
+// lib/services/provider/ordersave_service.dart
+
 import 'dart:convert';
-import 'dart:developer';
+import 'dart:developer' as dev;
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:marketing/constants/api_values.dart';
@@ -34,6 +36,17 @@ class OrderSaveException implements Exception {
 }
 
 class OrderSaveService {
+  static const _encoder = JsonEncoder.withIndent('  ');
+
+  static void _log(String msg, {String name = 'OrderSave'}) =>
+      dev.log(msg, name: name, level: 800);
+
+  // Pretty-prints any Map or List as indented JSON in a single log entry
+  static void _logJson(String label, Object json, {String name = 'OrderSave'}) {
+    final pretty = _encoder.convert(json);
+    dev.log('\n$label\n$pretty', name: name, level: 800);
+  }
+
   static Future<OrderSaveResponse> saveOrder({
     required int partyId,
     required List<ProductModel> cart,
@@ -44,109 +57,145 @@ class OrderSaveService {
     String? shippingAddress,
     String? shippingContact,
   }) async {
+    // ── Dates ─────────────────────────────────────────────────────────────
     final now = DateTime.now();
-    final orderDate =
-        '${now.year}'
-        '${now.month.toString().padLeft(2, '0')}'
-        '${now.day.toString().padLeft(2, '0')}';
+    final String orderDate = _formatDate(now);
+    final String chequeDateValue = chequeDate != null
+        ? _formatDate(chequeDate)
+        : _formatDate(now);
 
-    final double subtotal = cart.fold(0, (s, p) => s + p.cartNetAmount);
+    // ── Totals ────────────────────────────────────────────────────────────
+    final double subtotal = cart.fold(0.0, (s, p) => s + p.cartNetAmount);
     final double netAmount = subtotal - discount;
     final double vatAmount = tax;
     final double netPayable = netAmount + vatAmount;
 
-    // Format cheque date - use current date as default if not provided
-    final String chequeDateValue = chequeDate != null
-        ? '${chequeDate.year}${chequeDate.month.toString().padLeft(2, '0')}${chequeDate.day.toString().padLeft(2, '0')}'
-        : '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    // ── Master ────────────────────────────────────────────────────────────
+    final Map<String, dynamic> master = {
+      'partyId': partyId,
+      'compId': CurrentUser.compId,
+      'branchId': CurrentUser.branchId,
+      'userId': CurrentUser.userId,
+      'orderType': 7,
+      'orderDate': orderDate,
+      'chequeDate': chequeDateValue,
+      'orderId': 0,
+      'quoteId': 0,
+      'status': 0,
+      'netAmount': netAmount,
+      'netPayable': netPayable,
+      'discountAmount': discount,
+      'discountRate': 0,
+      'vatAmount': vatAmount,
+      'vatRate': 0,
+      'paidAmount': 0,
+      'deposite': 0,
+      'percentAmount': 0,
+      'bankId': 0,
+      'currencyId': 0,
+      'currencyRate': 0,
+      'otherAddition': 0,
+      'otherDeduction': 0,
+      'orderNo': '',
+      'refNo': '',
+      'narration': '',
+      'paymentType': '',
+      'billTo': '',
+      'billAddress': '',
+      'billContactNo': '',
+      'billEmail': '',
+      'billTerms': '',
+      'shippingAddress':
+          (shippingAddress == null || shippingAddress.trim().isEmpty)
+          ? ''
+          : shippingAddress.trim(),
+      'shippingContract':
+          (shippingContact == null || shippingContact.trim().isEmpty)
+          ? ''
+          : shippingContact.trim(),
+      'shippingEmail': '',
+      'shippingContractName': '',
+      'city': '',
+      'postalCode': '',
+      'checkedNarration': '',
+      'verifiedNarration': '',
+      'rejectedNarration': '',
+      'managementNarration': '',
+    };
+
+    // ── Details ───────────────────────────────────────────────────────────
+    final List<Map<String, dynamic>> details = cart
+        .map((p) => _buildDetail(p))
+        .toList();
+
+    // ── Full body ─────────────────────────────────────────────────────────
+    final Map<String, dynamic> body = {'master': master, 'details': details};
 
     final uri = Uri.parse('${BaseUrl.apiBase}/api/${V.v1}/${EndPoint.save}');
-    final request = http.MultipartRequest('POST', uri);
+    final String jsonBody = jsonEncode(body); // compact — for the HTTP call
 
-    request.headers['accept'] = '*/*';
-    request.headers['Authorization'] = 'Bearer ${CurrentUser.token}';
+    // ═══════════════════════════════════════════════════════════════════════
+    // PRETTY REQUEST LOG
+    // ═══════════════════════════════════════════════════════════════════════
+    _log('');
+    _log('╔════════════════════════════════════════╗');
+    _log('║        ORDER SAVE ▶ REQUEST             ║');
+    _log('╚════════════════════════════════════════╝');
+    _log('URL   : $uri');
+    _log('Token : Bearer ${CurrentUser.token}');
+    _log('');
 
-    request.fields.addAll({
-      'Master.OrderType': '7',
-      'Master.OrderId': '0',
-      'Master.Status': '0',
-      'Master.CompId': CurrentUser.compId.toString(),
-      'Master.BranchId': CurrentUser.branchId.toString(),
-      'Master.UserId': CurrentUser.userId.toString(),
-      'Master.PartyId': partyId.toString(),
-      'Master.OrderDate': orderDate,
-      'Master.NetAmount': netAmount.toStringAsFixed(2),
-      'Master.NetPayable': netPayable.toStringAsFixed(2),
-      'Master.DiscountAmount': discount.toStringAsFixed(2),
-      'Master.VatAmount': vatAmount.toStringAsFixed(2),
-      'Master.DiscountRate': '0',
-      'Master.VatRate': '0',
-      'Master.PaidAmount': '0',
-      'Master.Deposite': '0',
-      'Master.PaymentType': 'string',
-      'Master.BankId': '0',
-      'Master.CurrencyId': '0',
-      'Master.CurrencyRate': '0',
-      'Master.PercentAmount': '0',
-      'Master.OtherAddition': '0',
-      'Master.OtherDeduction': '0',
-      'Master.QuoteId': '0',
-      'Master.OrderNo': 'string',
-      'Master.RefNo': 'string',
-      'Master.Narration': 'string',
-      'Master.BillTo': 'string',
-      'Master.BillAddress': 'string',
-      'Master.BillContactNo': 'string',
-      'Master.BillEmail': 'string',
-      'Master.BillTerms': 'string',
-      'Master.ShippingAddress': 'string', // Need to apply
-      'Master.ShippingEmail': 'string',
-      'Master.ShippingContract': shippingContact ?? '', // Need to apply
-      'Master.ShippingContractName': shippingAddress ?? '',
-      'Master.City': 'string',
-      'Master.PostalCode': 'string',
-      'Master.ChequeDate': chequeDateValue,
-      'Master.CheckedNarration': 'string',
-      'Master.VerifiedNarration': 'string',
-      'Master.RejectedNarration': 'string',
-      'Master.ManagementNarration': 'string',
-    });
+    // Master — pretty JSON
+    _logJson('━━━ MASTER ━━━', master, name: 'OrderSave.master');
 
-    // ── Details — one field per product ───────────────────────────────────
-    for (final product in cart) {
-      request.files.add(
-        http.MultipartFile.fromString(
-          'Details',
-          jsonEncode(_buildDetail(product)),
-        ),
+    // Each detail item — pretty JSON individually so it's easy to read
+    for (int i = 0; i < details.length; i++) {
+      _logJson(
+        '━━━ DETAIL [${i + 1} / ${details.length}] ━━━',
+        details[i],
+        name: 'OrderSave.detail',
       );
     }
 
-    // ── Files — one field per attachment ──────────────────────────────────
-    if (files != null && files.isNotEmpty) {
-      for (final file in files) {
-        request.files.add(
-          await http.MultipartFile.fromPath('formFiles', file.path),
-        );
-      }
-      log('Attaching ${files.length} file(s)', name: 'OrderSave');
-    }
+    // Full body — pretty JSON in one shot (paste into Postman to verify)
+    _logJson(
+      '━━━ FULL BODY (copy → Postman) ━━━',
+      body,
+      name: 'OrderSave.body',
+    );
 
-    log('=== ORDER SAVE ===', name: 'OrderSave');
-    log('PartyId : $partyId', name: 'OrderSave');
-    log('Date    : $orderDate', name: 'OrderSave');
-    log('Cheque Date : $chequeDateValue', name: 'OrderSave');
-    log('Items   : ${cart.length}', name: 'OrderSave');
-    log('Files   : ${files?.length ?? 0}', name: 'OrderSave');
+    _log('════════════════════════════════════════');
 
     try {
-      final streamed = await request.send().timeout(
-        const Duration(seconds: 30),
-      );
-      final response = await http.Response.fromStream(streamed);
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'accept': '*/*',
+              'Authorization': 'Bearer ${CurrentUser.token}',
+              'Content-Type': 'application/json',
+            },
+            body: jsonBody,
+          )
+          .timeout(const Duration(seconds: 30));
 
-      log('Status : ${response.statusCode}', name: 'OrderSave');
-      log('Body   : ${response.body}', name: 'OrderSave');
+      // ── Pretty response log ────────────────────────────────────────────
+      _log('');
+      _log('╔════════════════════════════════════════╗');
+      _log('║        ORDER SAVE ▶ RESPONSE            ║');
+      _log('╚════════════════════════════════════════╝');
+      _log('Status : ${response.statusCode}');
+
+      // Try to pretty-print the response if it's valid JSON
+      try {
+        final decoded = jsonDecode(response.body);
+        _logJson('━━━ RESPONSE BODY ━━━', decoded, name: 'OrderSave.response');
+      } catch (_) {
+        // Not JSON — log raw
+        _log('Body   : ${response.body}', name: 'OrderSave.response');
+      }
+
+      _log('════════════════════════════════════════');
 
       if (response.statusCode == 200) {
         final jsonMap = jsonDecode(response.body) as Map<String, dynamic>;
@@ -158,9 +207,8 @@ class OrderSaveService {
         }
         return result;
       } else if (response.statusCode == 400) {
-        log('400 body: ${response.body}', name: 'OrderSave.ERROR');
         try {
-          final err = jsonDecode(response.body);
+          final err = jsonDecode(response.body) as Map<String, dynamic>;
           final errors = err['errors'] as Map<String, dynamic>?;
           if (errors != null && errors.isNotEmpty) {
             final msgs = errors.entries
@@ -168,6 +216,8 @@ class OrderSaveService {
                 .join('\n');
             throw OrderSaveException(msgs);
           }
+          final title = err['title'] as String?;
+          if (title != null) throw OrderSaveException(title);
         } catch (e) {
           if (e is OrderSaveException) rethrow;
         }
@@ -186,37 +236,46 @@ class OrderSaveService {
     }
   }
 
-  static Map<String, dynamic> _buildDetail(ProductModel p) {
-    return {
-      'productId': p.productId,
-      'productTypeId': 0,
-      'productDesc': p.name,
-      'custRef': 'string',
-      'unitQty': p.cartQty,
-      'tQty': p.cartQty * p.factor,
-      'pcsQty': p.cartQty,
-      'uniqueQty': p.cartQty,
-      'unitPrice': p.cartRate,
-      'uniquePrice': p.cartRate,
-      'discount': 0,
-      'discountAmt': p.cartDiscount,
-      'netAmount': p.cartNetAmount,
-      'vat': 0,
-      'forfeiture': 0,
-      'unitId': 0,
-      'sizeId': 0,
-      'rdId': 0,
-      'factor': p.factor,
-      'boxConv': 0,
-      'orderId': 0,
-      'orderType': 7,
-      'compId': CurrentUser.compId,
-      'branchId': CurrentUser.branchId,
-      'id': 0,
-      'remarks': p.cartNotes.isEmpty ? 'string' : p.cartNotes,
-    };
+  // ── Date formatter: DateTime → "yyyyMMdd" ─────────────────────────────────
+  static String _formatDate(DateTime d) {
+    final y = d.year.toString();
+    final m = d.month.toString().padLeft(2, '0');
+    final day = d.day.toString().padLeft(2, '0');
+    return '$y$m$day';
   }
+
+  // ── Build a single detail row ─────────────────────────────────────────────
+  static Map<String, dynamic> _buildDetail(ProductModel p) => {
+    'id': p.productId,
+    'orderId': 0,
+    'productId': p.productId,
+    'productDesc': p.name,
+    'productTypeId': 0,
+    'unitId': 0,
+    'sizeId': 0,
+    'rdId': 0,
+    'unitQty': p.cartQty,
+    'pcsQty': p.cartQty,
+    'tQty': (p.cartQty * p.factor).toInt(),
+    'uniqueQty': p.cartQty,
+    'unitPrice': p.cartRate,
+    'uniquePrice': p.cartRate,
+    'discount': 0,
+    'discountAmt': p.cartDiscount,
+    'netAmount': p.cartNetAmount,
+    'vat': 0,
+    'forfeiture': 0,
+    'factor': p.factor,
+    'boxConv': 0,
+    'orderType': 7,
+    'compId': CurrentUser.compId,
+    'branchId': CurrentUser.branchId,
+    'custRef': '',
+    'remarks': p.cartNotes.isEmpty ? '' : p.cartNotes,
+  };
 }
+
+//-----------------
 
 // import 'dart:convert';
 // import 'dart:developer';
@@ -254,14 +313,15 @@ class OrderSaveService {
 // }
 
 // class OrderSaveService {
-//   // static const _baseUrl = 'http://103.125.253.59:1122/api/v1';
-
 //   static Future<OrderSaveResponse> saveOrder({
 //     required int partyId,
 //     required List<ProductModel> cart,
 //     required double discount,
 //     required double tax,
-//     List<File>? files, // ← optional order-level attachments
+//     List<File>? files,
+//     DateTime? chequeDate,
+//     String? shippingAddress,
+//     String? shippingContact,
 //   }) async {
 //     final now = DateTime.now();
 //     final orderDate =
@@ -274,12 +334,18 @@ class OrderSaveService {
 //     final double vatAmount = tax;
 //     final double netPayable = netAmount + vatAmount;
 
+//     // Format cheque date — default to today if not provided
+//     final String chequeDateValue = chequeDate != null
+//         ? '${chequeDate.year}${chequeDate.month.toString().padLeft(2, '0')}${chequeDate.day.toString().padLeft(2, '0')}'
+//         : '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+
 //     final uri = Uri.parse('${BaseUrl.apiBase}/api/${V.v1}/${EndPoint.save}');
 //     final request = http.MultipartRequest('POST', uri);
 
 //     request.headers['accept'] = '*/*';
 //     request.headers['Authorization'] = 'Bearer ${CurrentUser.token}';
 
+//     // ── Master fields ─────────────────────────────────────────────────────
 //     request.fields.addAll({
 //       'Master.OrderType': '7',
 //       'Master.OrderId': '0',
@@ -313,124 +379,21 @@ class OrderSaveService {
 //       'Master.BillContactNo': 'string',
 //       'Master.BillEmail': 'string',
 //       'Master.BillTerms': 'string',
-//       'Master.ShippingAddress': 'string',
+//       'Master.ShippingAddress':
+//           (shippingAddress == null || shippingAddress.trim().isEmpty)
+//           ? 'string'
+//           : shippingAddress,
 //       'Master.ShippingEmail': 'string',
-//       'Master.ShippingContract': 'string',
+//       'Master.ShippingContract':
+//           (shippingContact == null || shippingContact.trim().isEmpty)
+//           ? 'string'
+//           : shippingContact,
 //       'Master.ShippingContractName': 'string',
 //       'Master.City': 'string',
 //       'Master.PostalCode': 'string',
+//       'Master.ChequeDate': chequeDateValue,
 //       'Master.CheckedNarration': 'string',
 //       'Master.VerifiedNarration': 'string',
 //       'Master.RejectedNarration': 'string',
 //       'Master.ManagementNarration': 'string',
 //     });
-
-//     // ── Details — one field per product ───────────────────────────────────
-//     for (final product in cart) {
-//       request.files.add(
-//         http.MultipartFile.fromString(
-//           'Details',
-//           jsonEncode(_buildDetail(product)),
-//         ),
-//       );
-//     }
-
-//     // ── Files — one field per attachment ──────────────────────────────────
-//     // Each file uses field name "formFiles" — same key repeated per file.
-//     // Mirrors: -F 'formFiles=@photo1.jpg' -F 'formFiles=@photo2.jpg'
-//     if (files != null && files.isNotEmpty) {
-//       for (final file in files) {
-//         request.files.add(
-//           await http.MultipartFile.fromPath(
-//             'formFiles', // field name — repeated per file
-//             file.path, // actual file path
-//           ),
-//         );
-//       }
-//       log('Attaching ${files.length} file(s)', name: 'OrderSave');
-//     }
-
-//     log('=== ORDER SAVE ===', name: 'OrderSave');
-//     log('PartyId : $partyId', name: 'OrderSave');
-//     log('Date    : $orderDate', name: 'OrderSave');
-//     log('Items   : ${cart.length}', name: 'OrderSave');
-//     log('Files   : ${files?.length ?? 0}', name: 'OrderSave');
-
-//     try {
-//       final streamed = await request.send().timeout(
-//         const Duration(seconds: 30),
-//       );
-//       final response = await http.Response.fromStream(streamed);
-
-//       log('Status : ${response.statusCode}', name: 'OrderSave');
-//       log('Body   : ${response.body}', name: 'OrderSave');
-
-//       if (response.statusCode == 200) {
-//         final jsonMap = jsonDecode(response.body) as Map<String, dynamic>;
-//         final result = OrderSaveResponse.fromJson(jsonMap);
-//         if (!result.status) {
-//           throw OrderSaveException(
-//             result.result.isNotEmpty ? result.result : 'Order save failed.',
-//           );
-//         }
-//         return result;
-//       } else if (response.statusCode == 400) {
-//         log('400 body: ${response.body}', name: 'OrderSave.ERROR');
-//         try {
-//           final err = jsonDecode(response.body);
-//           final errors = err['errors'] as Map<String, dynamic>?;
-//           if (errors != null && errors.isNotEmpty) {
-//             final msgs = errors.entries
-//                 .map((e) => '${e.key}: ${(e.value as List).first}')
-//                 .join('\n');
-//             throw OrderSaveException(msgs);
-//           }
-//         } catch (e) {
-//           if (e is OrderSaveException) rethrow;
-//         }
-//         throw OrderSaveException('Validation error: ${response.body}');
-//       } else if (response.statusCode == 401) {
-//         throw OrderSaveException('Session expired. Please login again.');
-//       } else {
-//         throw OrderSaveException(
-//           'Server error ${response.statusCode}: ${response.body}',
-//         );
-//       }
-//     } on OrderSaveException {
-//       rethrow;
-//     } catch (e) {
-//       throw OrderSaveException('Network error: $e');
-//     }
-//   }
-
-//   static Map<String, dynamic> _buildDetail(ProductModel p) {
-//     return {
-//       'productId': p.productId,
-//       'productTypeId': 0,
-//       'productDesc': p.name,
-//       'custRef': 'string',
-//       'unitQty': p.cartQty,
-//       'tQty': p.cartQty * p.factor,
-//       'pcsQty': p.cartQty,
-//       'uniqueQty': p.cartQty,
-//       'unitPrice': p.cartRate,
-//       'uniquePrice': p.cartRate,
-//       'discount': 0,
-//       'discountAmt': p.cartDiscount,
-//       'netAmount': p.cartNetAmount,
-//       'vat': 0,
-//       'forfeiture': 0,
-//       'unitId': 0,
-//       'sizeId': 0,
-//       'rdId': 0,
-//       'factor': p.factor,
-//       'boxConv': 0,
-//       'orderId': 0,
-//       'orderType': 7,
-//       'compId': CurrentUser.compId,
-//       'branchId': CurrentUser.branchId,
-//       'id': 0,
-//       'remarks': p.cartNotes.isEmpty ? 'string' : p.cartNotes,
-//     };
-//   }
-// }
