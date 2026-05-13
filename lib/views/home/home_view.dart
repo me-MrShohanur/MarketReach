@@ -18,10 +18,15 @@ class HomeView extends StatefulWidget {
 
 class _HomeViewState extends State<HomeView> {
   late final OrderListBloc _bloc;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
     super.initState();
+    _loadInitialData();
+  }
+
+  void _loadInitialData() {
     final now = DateTime.now();
     final from = now.subtract(const Duration(days: 30));
     _bloc = OrderListBloc()
@@ -50,16 +55,33 @@ class _HomeViewState extends State<HomeView> {
     return 'Good Evening';
   }
 
-  void _refresh() {
-    final now = DateTime.now();
-    final from = now.subtract(const Duration(days: 30));
-    _bloc.add(
-      LoadOrderList(
-        fromDate: _fmt(from),
-        toDate: _fmt(now),
-        statusFilter: const [],
-      ),
-    );
+  Future<void> _refresh() async {
+    if (_isRefreshing) return;
+
+    setState(() {
+      _isRefreshing = true;
+    });
+
+    try {
+      final now = DateTime.now();
+      final from = now.subtract(const Duration(days: 30));
+      _bloc.add(
+        LoadOrderList(
+          fromDate: _fmt(from),
+          toDate: _fmt(now),
+          statusFilter: const [],
+        ),
+      );
+
+      // Wait for the bloc to complete loading
+      await Future.delayed(const Duration(milliseconds: 500));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
+    }
   }
 
   Future<void> _logout(BuildContext context) async {
@@ -136,13 +158,13 @@ class _HomeViewState extends State<HomeView> {
           body: SafeArea(
             child: BlocBuilder<OrderListBloc, OrderListState>(
               builder: (context, state) {
-                final isLoading = state is OrderListLoading;
+                final isLoading = state is OrderListLoading && !_isRefreshing;
                 final isError = state is OrderListError;
                 final orders = state is OrderListLoaded
                     ? state.orders
                     : <OrderListItem>[];
 
-                // ── Full shimmer screen while loading ────────────────
+                // Show shimmer only on initial load, not during refresh
                 if (isLoading) return const _HomeShimmer();
 
                 final pendingCount = orders
@@ -153,8 +175,11 @@ class _HomeViewState extends State<HomeView> {
                 final deliverCount = orders.where((o) => o.status == 5).length;
 
                 return RefreshIndicator(
-                  onRefresh: () async => _refresh(),
+                  onRefresh: _refresh,
                   color: Colors.black,
+                  backgroundColor: Colors.white,
+                  strokeWidth: 2.5,
+                  triggerMode: RefreshIndicatorTriggerMode.onEdge,
                   child: SingleChildScrollView(
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
@@ -277,6 +302,47 @@ class _HomeViewState extends State<HomeView> {
                             ),
                           ),
                           const SizedBox(height: 16),
+                        ],
+
+                        // Show loading indicator during refresh
+                        if (_isRefreshing) ...[
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 16),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.blue.shade100,
+                                width: 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.blue.shade400,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Refreshing data...',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.blue.shade700,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ],
 
                         // ── Stats Grid ───────────────────────────────
@@ -677,3 +743,195 @@ class _ActionCard extends StatelessWidget {
     );
   }
 }
+
+//     );
+//   }
+
+//   // Shimmer stat card
+//   Widget _cardShimmer() {
+//     return Opacity(
+//       opacity: _anim.value,
+//       child: Container(
+//         padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+//         decoration: BoxDecoration(
+//           color: Colors.white,
+//           borderRadius: BorderRadius.circular(16),
+//           border: Border(
+//             left: BorderSide(color: Colors.grey.shade200, width: 3),
+//           ),
+//           boxShadow: [
+//             BoxShadow(
+//               color: Colors.black.withValues(alpha: 0.05),
+//               blurRadius: 10,
+//               offset: const Offset(0, 4),
+//             ),
+//           ],
+//         ),
+//         child: Column(
+//           crossAxisAlignment: CrossAxisAlignment.start,
+//           mainAxisAlignment: MainAxisAlignment.center,
+//           children: [_bar(60, 26), const SizedBox(height: 8), _bar(90, 12)],
+//         ),
+//       ),
+//     );
+//   }
+
+//   // Shimmer action card
+//   Widget _actionShimmer() {
+//     return Opacity(
+//       opacity: _anim.value,
+//       child: Container(
+//         padding: const EdgeInsets.symmetric(vertical: 24),
+//         decoration: BoxDecoration(
+//           color: Colors.grey.shade200,
+//           borderRadius: BorderRadius.circular(16),
+//         ),
+//         child: Column(
+//           mainAxisAlignment: MainAxisAlignment.center,
+//           children: [
+//             _box(28, 28, radius: 6),
+//             const SizedBox(height: 10),
+//             _bar(80, 13),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+
+//   Widget _bar(double w, double h) => Opacity(
+//     opacity: _anim.value,
+//     child: Container(
+//       width: w,
+//       height: h,
+//       decoration: BoxDecoration(
+//         color: Colors.grey.shade200,
+//         borderRadius: BorderRadius.circular(6),
+//       ),
+//     ),
+//   );
+
+//   Widget _box(double w, double h, {double radius = 8}) => Opacity(
+//     opacity: _anim.value,
+//     child: Container(
+//       width: w,
+//       height: h,
+//       decoration: BoxDecoration(
+//         color: Colors.grey.shade200,
+//         borderRadius: BorderRadius.circular(radius),
+//       ),
+//     ),
+//   );
+// }
+
+// // ── Stat Card ─────────────────────────────────────────────────────────────────
+
+// class _StatCard extends StatelessWidget {
+//   final String value;
+//   final String label;
+//   final Color accentColor;
+//   final VoidCallback? onTap;
+
+//   const _StatCard({
+//     required this.value,
+//     required this.label,
+//     required this.accentColor,
+//     this.onTap,
+//   });
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return InkWell(
+//       onTap: onTap,
+//       borderRadius: BorderRadius.circular(16),
+//       child: Container(
+//         padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+//         decoration: BoxDecoration(
+//           color: Colors.white,
+//           borderRadius: BorderRadius.circular(16),
+//           border: Border(left: BorderSide(color: accentColor, width: 3)),
+//           boxShadow: [
+//             BoxShadow(
+//               color: Colors.black.withValues(alpha: 0.05),
+//               blurRadius: 10,
+//               offset: const Offset(0, 4),
+//             ),
+//           ],
+//         ),
+//         child: Column(
+//           crossAxisAlignment: CrossAxisAlignment.start,
+//           mainAxisAlignment: MainAxisAlignment.center,
+//           children: [
+//             Text(
+//               value,
+//               style: TextStyle(
+//                 fontSize: 24,
+//                 fontWeight: FontWeight.w700,
+//                 color: accentColor,
+//                 letterSpacing: -0.5,
+//               ),
+//             ),
+//             const SizedBox(height: 5),
+//             Text(
+//               label,
+//               style: const TextStyle(
+//                 fontSize: 12,
+//                 color: Colors.black45,
+//                 fontWeight: FontWeight.w500,
+//               ),
+//             ),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+// }
+
+// // ── Action Card ───────────────────────────────────────────────────────────────
+// class _ActionCard extends StatelessWidget {
+//   final IconData icon;
+//   final String label;
+//   final VoidCallback onTap;
+
+//   const _ActionCard({
+//     required this.icon,
+//     required this.label,
+//     required this.onTap,
+//   });
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return GestureDetector(
+//       onTap: onTap,
+//       child: Container(
+//         padding: const EdgeInsets.symmetric(vertical: 24),
+//         decoration: BoxDecoration(
+//           color: Colors.black,
+//           borderRadius: BorderRadius.circular(16),
+//           boxShadow: [
+//             BoxShadow(
+//               color: Colors.black.withValues(alpha: 0.15),
+//               blurRadius: 12,
+//               offset: const Offset(0, 6),
+//             ),
+//           ],
+//         ),
+//         child: Column(
+//           mainAxisAlignment: MainAxisAlignment.center,
+//           children: [
+//             Icon(icon, color: Colors.white, size: 28),
+//             const SizedBox(height: 10),
+//             Text(
+//               label,
+//               style: const TextStyle(
+//                 fontSize: 13,
+//                 fontWeight: FontWeight.w600,
+//                 color: Colors.white,
+//                 letterSpacing: -0.1,
+//               ),
+//             ),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+// }

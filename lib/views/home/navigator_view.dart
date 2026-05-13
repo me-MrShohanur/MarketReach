@@ -4,6 +4,7 @@ import 'package:marketing/bloc/navbar/navbar_bloc.dart';
 import 'package:marketing/bloc/navbar/navbar_event.dart';
 import 'package:marketing/bloc/navbar/navbar_state.dart';
 import 'package:marketing/views/home/home_view.dart';
+import 'package:marketing/views/order/order_report_view.dart';
 
 class NavigatorView extends StatelessWidget {
   const NavigatorView({super.key});
@@ -11,7 +12,7 @@ class NavigatorView extends StatelessWidget {
   final List<Widget> _pages = const [
     // LoginView(),
     HomeView(),
-    Center(child: Text('Settings')),
+    OrderView(),
     Center(child: Text('Profile')),
   ];
 

@@ -434,52 +434,52 @@ class _Header extends StatelessWidget {
               ),
             ],
           ),
-          GestureDetector(
-            onTap: onAttachmentTap,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(
-                    Icons.attach_file_rounded,
-                    color: Colors.white,
-                    size: 22,
-                  ),
-                ),
-                if (attachmentCount > 0)
-                  Positioned(
-                    top: -6,
-                    right: -6,
-                    child: Container(
-                      width: 20,
-                      height: 20,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF2196F3),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          attachmentCount > 9
-                              ? '9+'
-                              : attachmentCount.toString(),
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          // GestureDetector(
+          //   onTap: onAttachmentTap,
+          //   child: Stack(
+          //     clipBehavior: Clip.none,
+          //     children: [
+          //       Container(
+          //         width: 44,
+          //         height: 44,
+          //         decoration: BoxDecoration(
+          //           color: Colors.black,
+          //           borderRadius: BorderRadius.circular(12),
+          //         ),
+          //         child: const Icon(
+          //           Icons.attach_file_rounded,
+          //           color: Colors.white,
+          //           size: 22,
+          //         ),
+          //       ),
+          //       if (attachmentCount > 0)
+          //         Positioned(
+          //           top: -6,
+          //           right: -6,
+          //           child: Container(
+          //             width: 20,
+          //             height: 20,
+          //             decoration: const BoxDecoration(
+          //               color: Color(0xFF2196F3),
+          //               shape: BoxShape.circle,
+          //             ),
+          //             child: Center(
+          //               child: Text(
+          //                 attachmentCount > 9
+          //                     ? '9+'
+          //                     : attachmentCount.toString(),
+          //                 style: const TextStyle(
+          //                   fontSize: 11,
+          //                   fontWeight: FontWeight.w700,
+          //                   color: Colors.white,
+          //                 ),
+          //               ),
+          //             ),
+          //           ),
+          //         ),
+          //     ],
+          //   ),
+          // ),
         ],
       ),
     );

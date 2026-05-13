@@ -1,8 +1,13 @@
 // lib/views/home/subpages/pending_orders_view.dart
 
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:marketing/bloc/image/image_order.dart';
 
 import 'package:marketing/bloc/order/pending_order_block.dart';
 import 'package:marketing/views/home/subpages/order_details_view.dart';
@@ -12,7 +17,7 @@ class PendingOrdersView extends StatefulWidget {
   final String title;
   final String subtitle;
   final Color accentColor;
-  final List<OrderListItem>? preloadedOrders; // ← cached from home
+  final List<OrderListItem>? preloadedOrders;
 
   const PendingOrdersView({
     super.key,
@@ -40,7 +45,6 @@ class _PendingOrdersViewState extends State<PendingOrdersView> {
     _bloc = OrderListBloc();
 
     if (widget.preloadedOrders != null) {
-      // ── Instant: filter cached data, no API call ──────────────────
       _bloc.add(
         PreloadOrderList(
           orders: widget.preloadedOrders!,
@@ -48,7 +52,6 @@ class _PendingOrdersViewState extends State<PendingOrdersView> {
         ),
       );
     } else {
-      // ── Fallback: fetch from API ───────────────────────────────────
       _bloc.add(
         LoadOrderList(
           fromDate: _fmt(_from),
@@ -69,7 +72,6 @@ class _PendingOrdersViewState extends State<PendingOrdersView> {
       '${d.year}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
 
   void _load() {
-    // Always re-fetches from API (used on date change or manual refresh)
     _bloc.add(
       LoadOrderList(
         fromDate: _fmt(_from),
@@ -101,7 +103,7 @@ class _PendingOrdersViewState extends State<PendingOrdersView> {
         _from = range.start;
         _to = range.end;
       });
-      _load(); // date changed → must re-fetch
+      _load();
     }
   }
 
@@ -333,11 +335,13 @@ class _OrderList extends StatelessWidget {
                 context,
                 MaterialPageRoute(
                   builder: (_) => OrderDetailView(
-                    orderId: order.id,
+                    orderId: order.orderId,
                     orderNo: order.orderNo,
+                    id: order.id,
                   ),
                 ),
               ),
+              onAttachTap: () => _OrderAttachSheet.show(context, order: order),
             ),
           );
         },
@@ -462,8 +466,13 @@ class _StripTile extends StatelessWidget {
 class _OrderCard extends StatelessWidget {
   final OrderListItem order;
   final VoidCallback onTap;
+  final VoidCallback onAttachTap;
 
-  const _OrderCard({required this.order, required this.onTap});
+  const _OrderCard({
+    required this.order,
+    required this.onTap,
+    required this.onAttachTap,
+  });
 
   Color get _statusColor {
     switch (order.status) {
@@ -504,6 +513,7 @@ class _OrderCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Row 1: order no + status badge ──────────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -519,6 +529,8 @@ class _OrderCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 8),
+
+              // ── Row 2: party name ────────────────────────────────────────
               Row(
                 children: [
                   const Icon(
@@ -543,9 +555,12 @@ class _OrderCard extends StatelessWidget {
               const SizedBox(height: 10),
               const Divider(height: 1, color: Color(0xFFF0F0F0)),
               const SizedBox(height: 10),
+
+              // ── Row 3: date + amount + attach button ─────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  // date
                   Row(
                     children: [
                       const Icon(
@@ -564,30 +579,57 @@ class _OrderCard extends StatelessWidget {
                       ),
                     ],
                   ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+
+                  // amount + attach button
+                  Row(
                     children: [
-                      const Text(
-                        'Net Payable',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.black38,
-                          letterSpacing: 0.1,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          const Text(
+                            'Net Payable',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: Colors.black38,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                          Text(
+                            '৳${order.netPayable.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF4CAF50),
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        '৳${order.netPayable.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF4CAF50),
-                          letterSpacing: -0.3,
+                      const SizedBox(width: 10),
+
+                      // ── Attach button ────────────────────────────────────
+                      GestureDetector(
+                        onTap: onAttachTap,
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE3F2FD),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.attach_file_rounded,
+                            color: Color(0xFF2196F3),
+                            size: 18,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
+
+              // ── Balance row ──────────────────────────────────────────────
               if (order.balance != 0) ...[
                 const SizedBox(height: 8),
                 Container(
@@ -649,6 +691,497 @@ class _StatusBadge extends StatelessWidget {
         fontWeight: FontWeight.w700,
         color: color,
         letterSpacing: 0.2,
+      ),
+    ),
+  );
+}
+
+// ─── Order Attach Sheet ───────────────────────────────────────────────────────
+// Opens as a bottom sheet with its own SaveImageBloc.
+// Lets the user pick files then upload them to SaveImageForOrder.
+
+class _OrderAttachSheet extends StatefulWidget {
+  final OrderListItem order;
+
+  const _OrderAttachSheet({required this.order});
+
+  static void show(BuildContext context, {required OrderListItem order}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => BlocProvider(
+        create: (_) => SaveImageBloc(),
+        child: _OrderAttachSheet(order: order),
+      ),
+    );
+  }
+
+  @override
+  State<_OrderAttachSheet> createState() => _OrderAttachSheetState();
+}
+
+class _OrderAttachSheetState extends State<_OrderAttachSheet> {
+  final List<File> _files = [];
+
+  // ── File pickers ──────────────────────────────────────────────────────────
+
+  Future<void> _pickCamera() async {
+    final XFile? photo = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 80,
+    );
+    if (photo != null) setState(() => _files.add(File(photo.path)));
+  }
+
+  Future<void> _pickGallery() async {
+    final List<XFile> photos = await ImagePicker().pickMultiImage(
+      imageQuality: 80,
+    );
+    if (photos.isNotEmpty) {
+      setState(() {
+        for (final p in photos) _files.add(File(p.path));
+      });
+    }
+  }
+
+  Future<void> _pickFiles() async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: true,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'],
+    );
+    if (result != null) {
+      setState(() {
+        for (final f in result.files) {
+          if (f.path != null) _files.add(File(f.path!));
+        }
+      });
+    }
+  }
+
+  void _removeFile(int index) => setState(() => _files.removeAt(index));
+
+  void _upload() {
+    if (_files.isEmpty) return;
+    context.read<SaveImageBloc>().add(
+      UploadOrderImages(
+        orderId: widget.order.id,
+        partyId: widget.order.partyId,
+        files: List.from(_files),
+      ),
+    );
+  }
+
+  String _ext(File f) {
+    final parts = f.path.split('/').last.split('.');
+    return parts.length > 1 ? parts.last.toLowerCase() : 'file';
+  }
+
+  bool _isImage(File f) =>
+      ['jpg', 'jpeg', 'png', 'gif', 'webp', 'heic'].contains(_ext(f));
+
+  String _fileName(File f) => f.path.split('/').last;
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocListener<SaveImageBloc, SaveImageState>(
+      listener: (context, state) {
+        if (state is SaveImageSuccess) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('✓ ${state.message}'),
+              backgroundColor: const Color(0xFF4CAF50),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
+        if (state is SaveImageFailure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
+      },
+      child: Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFFF5F5F5),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: EdgeInsets.fromLTRB(
+            24,
+            16,
+            24,
+            24 + MediaQuery.of(context).padding.bottom,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // drag handle
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.black12,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+
+              // ── Header ────────────────────────────────────────────────
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Attach Files',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: -0.4,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Order ${widget.order.orderNo}  ·  ${widget.order.partyName}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.black45,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  // order id / party id info chip
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE3F2FD),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      '#${widget.order.id}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1565C0),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // ── Picker buttons ────────────────────────────────────────
+              Row(
+                children: [
+                  _PickerBtn(
+                    icon: Icons.camera_alt_rounded,
+                    label: 'Camera',
+                    color: const Color(0xFF2196F3),
+                    bg: const Color(0xFFE3F2FD),
+                    onTap: _pickCamera,
+                  ),
+                  const SizedBox(width: 10),
+                  _PickerBtn(
+                    icon: Icons.photo_library_rounded,
+                    label: 'Gallery',
+                    color: const Color(0xFF9C27B0),
+                    bg: const Color(0xFFF3E5F5),
+                    onTap: _pickGallery,
+                  ),
+                  const SizedBox(width: 10),
+                  _PickerBtn(
+                    icon: Icons.attach_file_rounded,
+                    label: 'Files',
+                    color: const Color(0xFF4CAF50),
+                    bg: const Color(0xFFE8F5E9),
+                    onTap: _pickFiles,
+                  ),
+                ],
+              ),
+
+              // ── File list ─────────────────────────────────────────────
+              if (_files.isNotEmpty) ...[
+                const SizedBox(height: 16),
+
+                // image thumbnails
+                if (_files.any(_isImage))
+                  SizedBox(
+                    height: 80,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _files.length,
+                      itemBuilder: (_, i) {
+                        final f = _files[i];
+                        if (!_isImage(f)) return const SizedBox.shrink();
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Stack(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.file(
+                                  f,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                              Positioned(
+                                top: 4,
+                                right: 4,
+                                child: GestureDetector(
+                                  onTap: () => _removeFile(i),
+                                  child: Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.black54,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.close_rounded,
+                                      color: Colors.white,
+                                      size: 12,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+
+                // non-image file rows
+                ..._files
+                    .asMap()
+                    .entries
+                    .where((e) => !_isImage(e.value))
+                    .map(
+                      (entry) => Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFEEEEEE)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 34,
+                                height: 34,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE3F2FD),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    _ext(entry.value).toUpperCase(),
+                                    style: const TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      color: Color(0xFF2196F3),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _fileName(entry.value),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () => _removeFile(entry.key),
+                                child: const Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                  color: Colors.redAccent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+              ],
+
+              const SizedBox(height: 20),
+
+              // ── Upload button ─────────────────────────────────────────
+              BlocBuilder<SaveImageBloc, SaveImageState>(
+                builder: (context, state) {
+                  final isUploading = state is SaveImageUploading;
+                  return GestureDetector(
+                    onTap: (_files.isEmpty || isUploading) ? null : _upload,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      width: double.infinity,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: (_files.isEmpty || isUploading)
+                            ? Colors.black26
+                            : Colors.black,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: (_files.isEmpty || isUploading)
+                            ? []
+                            : const [
+                                BoxShadow(
+                                  color: Color(0x26000000),
+                                  blurRadius: 12,
+                                  offset: Offset(0, 6),
+                                ),
+                              ],
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (isUploading) ...[
+                            const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Uploading…',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ] else ...[
+                            const Icon(
+                              Icons.cloud_upload_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _files.isEmpty
+                                  ? 'Select files to upload'
+                                  : 'Upload ${_files.length} file${_files.length == 1 ? '' : 's'}',
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                                letterSpacing: -0.1,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Picker Button ────────────────────────────────────────────────────────────
+
+class _PickerBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final Color bg;
+  final VoidCallback onTap;
+
+  const _PickerBtn({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.bg,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0D000000),
+              blurRadius: 8,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
       ),
     ),
   );

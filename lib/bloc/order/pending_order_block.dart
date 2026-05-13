@@ -178,6 +178,8 @@ class OrderListBloc extends Bloc<OrderListEvent, OrderListState> {
       );
 
       if (response.statusCode == 200) {
+        log(name: 'GetOrderList', _url.toString());
+        log(name: 'body', body.toString());
         final json = jsonDecode(response.body) as Map<String, dynamic>;
         if (json['status'] == true) {
           var list = (json['result'] as List)
