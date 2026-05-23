@@ -6,7 +6,7 @@ import 'package:marketing/services/models/chalan_bill_model.dart';
 class ChallanRepository {
   final String baseUrl = 'http://103.125.253.59:1122/api/v1';
 
-  Future<List<ChallanBill>> getChallanBill({
+  Future<List<ChallanBillModel>> getChallanBill({
     required int partyId,
     required int compId,
     required int types,
@@ -57,7 +57,7 @@ class ChallanRepository {
         );
       }
 
-      final result = <ChallanBill>[];
+      final result = <ChallanBillModel>[];
       for (int i = 0; i < list.length; i++) {
         final item = list[i];
         if (item is! Map<String, dynamic>) {
@@ -68,7 +68,7 @@ class ChallanRepository {
           continue;
         }
         try {
-          result.add(ChallanBill.fromJson(item));
+          result.add(ChallanBillModel.fromJson(item));
         } catch (e) {
           // Print the full item and which field failed so we can fix the model
           dev.log(

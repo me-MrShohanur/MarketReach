@@ -19,7 +19,7 @@ class ChallanInitial extends ChallanState {}
 class ChallanLoading extends ChallanState {}
 
 class ChallanLoaded extends ChallanState {
-  final List<ChallanBill> challans;
+  final List<ChallanBillModel> challans;
   ChallanLoaded(this.challans);
 }
 
@@ -29,10 +29,10 @@ class ChallanError extends ChallanState {
 }
 
 //-------------------Bloc------------------//
-class ChallanBlocList extends Bloc<ChallanEvent, ChallanState> {
+class DeliveryListBloc extends Bloc<ChallanEvent, ChallanState> {
   final ChallanRepository repository;
 
-  ChallanBlocList({required this.repository}) : super(ChallanInitial()) {
+  DeliveryListBloc({required this.repository}) : super(ChallanInitial()) {
     on<FetchChallanBill>(_onFetchChallanBill);
   }
 

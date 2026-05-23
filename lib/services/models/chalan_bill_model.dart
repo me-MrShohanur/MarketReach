@@ -1,4 +1,4 @@
-class ChallanBill {
+class ChallanBillModel {
   final int challanId;
   final String orderNo;
   final String orderDate;
@@ -6,7 +6,7 @@ class ChallanBill {
   final int untitQty;
   final int deliverdQty;
 
-  ChallanBill({
+  ChallanBillModel({
     required this.challanId,
     required this.orderNo,
     required this.orderDate,
@@ -15,8 +15,8 @@ class ChallanBill {
     required this.deliverdQty,
   });
 
-  factory ChallanBill.fromJson(Map<String, dynamic> json) {
-    return ChallanBill(
+  factory ChallanBillModel.fromJson(Map<String, dynamic> json) {
+    return ChallanBillModel(
       challanId: json['challanId'],
       orderNo: json['orderNo'],
       orderDate: json['orderDate'],

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:marketing/bloc/chalan-deleiver/block/chalan_bloc_list.dart';
-import 'package:marketing/bloc/chalan-deleiver/chalan_bill.dart';
-
 import 'package:marketing/bloc/chalan-deleiver/repository/get_chalan_repo.dart';
+import 'package:marketing/services/models/chalan_bill_model.dart';
+
+// ════════════════════════════════════════════════════════════════════════════
+// PENDING DELIVERY VIEW  (types = 1)
+// ════════════════════════════════════════════════════════════════════════════
 
 class PendingDeliveryView extends StatelessWidget {
   const PendingDeliveryView({super.key});
@@ -12,7 +15,7 @@ class PendingDeliveryView extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) =>
-          ChallanBlocList(repository: ChallanRepository())
+          DeliveryListBloc(repository: ChallanRepository())
             ..add(FetchChallanBill(types: 1)),
       child: const _PendingDeliveryBody(),
     );
@@ -59,9 +62,9 @@ class _PendingDeliveryBody extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 14),
-                  Column(
+                  const Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       Text(
                         'Challan & Delivery',
                         style: TextStyle(fontSize: 12, color: Colors.black45),
@@ -84,7 +87,7 @@ class _PendingDeliveryBody extends StatelessWidget {
             const SizedBox(height: 16),
 
             // ── Summary Strip ────────────────────────────────────
-            BlocBuilder<ChallanBlocList, ChallanState>(
+            BlocBuilder<DeliveryListBloc, ChallanState>(
               builder: (context, state) {
                 final count = state is ChallanLoaded
                     ? state.challans.length
@@ -92,7 +95,6 @@ class _PendingDeliveryBody extends StatelessWidget {
                 final totalUnit = state is ChallanLoaded
                     ? state.challans.fold<int>(0, (s, e) => s + e.untitQty)
                     : 0;
-
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: IntrinsicHeight(
@@ -122,15 +124,13 @@ class _PendingDeliveryBody extends StatelessWidget {
 
             // ── List ─────────────────────────────────────────────
             Expanded(
-              child: BlocBuilder<ChallanBlocList, ChallanState>(
+              child: BlocBuilder<DeliveryListBloc, ChallanState>(
                 builder: (context, state) {
-                  if (state is ChallanLoading) {
-                    return const _ChallanShimmer();
-                  }
+                  if (state is ChallanLoading) return const _ChallanShimmer();
                   if (state is ChallanError) {
                     return _ErrorView(
                       message: state.message,
-                      onRetry: () => context.read<ChallanBlocList>().add(
+                      onRetry: () => context.read<DeliveryListBloc>().add(
                         FetchChallanBill(types: 1),
                       ),
                     );
@@ -165,165 +165,7 @@ class _PendingDeliveryBody extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// DELIVERED VIEW
-// ════════════════════════════════════════════════════════════════════════════
-
-class DeliveredView extends StatelessWidget {
-  const DeliveredView({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) =>
-          ChallanBlocList(repository: ChallanRepository())
-            ..add(FetchChallanBill(types: 2)),
-      child: const _DeliveredBody(),
-    );
-  }
-}
-
-class _DeliveredBody extends StatelessWidget {
-  const _DeliveredBody();
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.06),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        size: 16,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 14),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'Challan & Delivery',
-                        style: TextStyle(fontSize: 12, color: Colors.black45),
-                      ),
-                      SizedBox(height: 2),
-                      Text(
-                        'Delivered',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            BlocBuilder<ChallanBlocList, ChallanState>(
-              builder: (context, state) {
-                final count = state is ChallanLoaded
-                    ? state.challans.length
-                    : 0;
-                final totalDelivered = state is ChallanLoaded
-                    ? state.challans.fold<int>(0, (s, e) => s + e.deliverdQty)
-                    : 0;
-
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: IntrinsicHeight(
-                    child: Row(
-                      children: [
-                        _SummaryChip(
-                          label: 'Total Challans',
-                          value: '$count',
-                          icon: Icons.receipt_long_rounded,
-                          color: const Color(0xFF009688),
-                        ),
-                        const SizedBox(width: 10),
-                        _SummaryChip(
-                          label: 'Delivered Qty',
-                          value: '$totalDelivered',
-                          icon: Icons.check_circle_rounded,
-                          color: const Color(0xFF4CAF50),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-
-            const SizedBox(height: 16),
-
-            Expanded(
-              child: BlocBuilder<ChallanBlocList, ChallanState>(
-                builder: (context, state) {
-                  if (state is ChallanLoading) return const _ChallanShimmer();
-                  if (state is ChallanError) {
-                    return _ErrorView(
-                      message: state.message,
-                      onRetry: () => context.read<ChallanBlocList>().add(
-                        FetchChallanBill(types: 2),
-                      ),
-                    );
-                  }
-                  if (state is ChallanLoaded) {
-                    if (state.challans.isEmpty) {
-                      return const _EmptyView(
-                        label: 'No delivered orders yet',
-                        icon: Icons.check_circle_outline_rounded,
-                      );
-                    }
-                    return ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-                      itemCount: state.challans.length,
-                      itemBuilder: (_, i) => _ChallanCard(
-                        item: state.challans[i],
-                        accentColor: const Color(0xFF009688),
-                        statusLabel: 'Delivered',
-                        statusColor: const Color(0xFF4CAF50),
-                      ),
-                    );
-                  }
-                  return const SizedBox();
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ════════════════════════════════════════════════════════════════════════════
-// SHARED WIDGETS
+// SHARED WIDGETS  (used by pending_delivery, delivered, bill pages)
 // ════════════════════════════════════════════════════════════════════════════
 
 class _SummaryChip extends StatelessWidget {
@@ -394,7 +236,7 @@ class _SummaryChip extends StatelessWidget {
 }
 
 class _ChallanCard extends StatelessWidget {
-  final ChallanBill item;
+  final ChallanBillModel item;
   final Color accentColor;
   final String statusLabel;
   final Color statusColor;
@@ -407,9 +249,8 @@ class _ChallanCard extends StatelessWidget {
   });
 
   String _formatDate(String raw) {
-    // raw: "20260511" → "11 May 2026"
     if (raw.length != 8) return raw;
-    final months = [
+    const months = [
       '',
       'Jan',
       'Feb',
@@ -460,7 +301,7 @@ class _ChallanCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Top row ──
+            // ── Top row ──────────────────────────────────────────
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -495,10 +336,10 @@ class _ChallanCard extends StatelessWidget {
 
             const SizedBox(height: 8),
 
-            // ── Date + Challan ID ──
+            // ── Date + Challan ID ─────────────────────────────────
             Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.calendar_today_rounded,
                   size: 12,
                   color: Colors.black38,
@@ -509,7 +350,7 @@ class _ChallanCard extends StatelessWidget {
                   style: const TextStyle(fontSize: 12, color: Colors.black45),
                 ),
                 const SizedBox(width: 14),
-                Icon(Icons.tag_rounded, size: 12, color: Colors.black38),
+                const Icon(Icons.tag_rounded, size: 12, color: Colors.black38),
                 const SizedBox(width: 4),
                 Text(
                   'Challan #${item.challanId}',
@@ -520,7 +361,7 @@ class _ChallanCard extends StatelessWidget {
 
             const SizedBox(height: 12),
 
-            // ── Progress Bar ──
+            // ── Progress Bar ──────────────────────────────────────
             ClipRRect(
               borderRadius: BorderRadius.circular(4),
               child: LinearProgressIndicator(
@@ -533,7 +374,7 @@ class _ChallanCard extends StatelessWidget {
 
             const SizedBox(height: 10),
 
-            // ── Qty Row ──
+            // ── Qty Row ───────────────────────────────────────────
             Row(
               children: [
                 _QtyBadge(
@@ -605,11 +446,10 @@ class _QtyBadge extends StatelessWidget {
   }
 }
 
-// ── Shimmer ──────────────────────────────────────────────────────────────────
+// ── Shimmer ───────────────────────────────────────────────────────────────────
 
 class _ChallanShimmer extends StatefulWidget {
   const _ChallanShimmer();
-
   @override
   State<_ChallanShimmer> createState() => _ChallanShimmerState();
 }
@@ -700,12 +540,11 @@ class _ChallanShimmerState extends State<_ChallanShimmer>
   );
 }
 
-// ── Empty / Error ─────────────────────────────────────────────────────────────
+// ── Empty ─────────────────────────────────────────────────────────────────────
 
 class _EmptyView extends StatelessWidget {
   final String label;
   final IconData icon;
-
   const _EmptyView({required this.label, required this.icon});
 
   @override
@@ -730,10 +569,11 @@ class _EmptyView extends StatelessWidget {
   }
 }
 
+// ── Error ─────────────────────────────────────────────────────────────────────
+
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
-
   const _ErrorView({required this.message, required this.onRetry});
 
   @override
