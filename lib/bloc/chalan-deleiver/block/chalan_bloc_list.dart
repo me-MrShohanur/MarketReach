@@ -1,6 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:marketing/bloc/chalan-deleiver/repository/get_chalan_repo.dart';
-import 'package:marketing/services/models/chalan_bill.dart';
+import 'package:marketing/services/models/chalan_bill_model.dart';
 import 'package:marketing/services/provider/current_user.dart';
 
 abstract class ChallanEvent {}
@@ -29,10 +29,10 @@ class ChallanError extends ChallanState {
 }
 
 //-------------------Bloc------------------//
-class ChallanBloc extends Bloc<ChallanEvent, ChallanState> {
+class ChallanBlocList extends Bloc<ChallanEvent, ChallanState> {
   final ChallanRepository repository;
 
-  ChallanBloc({required this.repository}) : super(ChallanInitial()) {
+  ChallanBlocList({required this.repository}) : super(ChallanInitial()) {
     on<FetchChallanBill>(_onFetchChallanBill);
   }
 

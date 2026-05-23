@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:marketing/bloc/chalan-deleiver/block/chalan_bloc.dart';
+import 'package:marketing/bloc/chalan-deleiver/block/chalan_bloc_list.dart';
 
 import 'package:marketing/bloc/chalan-deleiver/repository/get_chalan_repo.dart';
-import 'package:marketing/services/models/chalan_bill.dart';
+import 'package:marketing/services/models/chalan_bill_model.dart';
 
 class BillView extends StatelessWidget {
   const BillView({super.key});
@@ -12,7 +12,7 @@ class BillView extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) =>
-          ChallanBloc(repository: ChallanRepository())
+          ChallanBlocList(repository: ChallanRepository())
             ..add(FetchChallanBill(types: 3)),
       child: const _BillBody(),
     );
@@ -84,7 +84,7 @@ class _BillBody extends StatelessWidget {
             const SizedBox(height: 16),
 
             // ── Summary Strip ────────────────────────────────────
-            BlocBuilder<ChallanBloc, ChallanState>(
+            BlocBuilder<ChallanBlocList, ChallanState>(
               builder: (context, state) {
                 final count = state is ChallanLoaded
                     ? state.challans.length
@@ -122,7 +122,7 @@ class _BillBody extends StatelessWidget {
 
             // ── List ─────────────────────────────────────────────
             Expanded(
-              child: BlocBuilder<ChallanBloc, ChallanState>(
+              child: BlocBuilder<ChallanBlocList, ChallanState>(
                 builder: (context, state) {
                   if (state is ChallanLoading) {
                     return const _ChallanShimmer();
@@ -130,7 +130,7 @@ class _BillBody extends StatelessWidget {
                   if (state is ChallanError) {
                     return _ErrorView(
                       message: state.message,
-                      onRetry: () => context.read<ChallanBloc>().add(
+                      onRetry: () => context.read<ChallanBlocList>().add(
                         FetchChallanBill(types: 3),
                       ),
                     );

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:developer' as dev;
 import 'package:http/http.dart' as http;
-import 'package:marketing/services/models/chalan_bill.dart';
+import 'package:marketing/services/models/chalan_bill_model.dart';
 
 class ChallanRepository {
   final String baseUrl = 'http://103.125.253.59:1122/api/v1';
