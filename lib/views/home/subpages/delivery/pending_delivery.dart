@@ -1,12 +1,14 @@
+// ════════════════════════════════════════════════════════════════════════════
+// PENDING DELIVERY VIEW  (types = 1)  — with details navigation wired
+// lib/views/home/subpages/delivery/pending_delivery.dart
+// ════════════════════════════════════════════════════════════════════════════
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:marketing/bloc/chalan-deleiver/block/chalan_bloc_list.dart';
 import 'package:marketing/bloc/chalan-deleiver/repository/get_chalan_repo.dart';
 import 'package:marketing/services/models/chalan_bill_model.dart';
-
-// ════════════════════════════════════════════════════════════════════════════
-// PENDING DELIVERY VIEW  (types = 1)
-// ════════════════════════════════════════════════════════════════════════════
+import 'package:marketing/views/home/subpages/delivery/details/chalan_detail_view.dart';
 
 class PendingDeliveryView extends StatelessWidget {
   const PendingDeliveryView({super.key});
@@ -165,7 +167,7 @@ class _PendingDeliveryBody extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// SHARED WIDGETS  (used by pending_delivery, delivered, bill pages)
+// SHARED WIDGETS
 // ════════════════════════════════════════════════════════════════════════════
 
 class _SummaryChip extends StatelessWidget {
@@ -282,123 +284,135 @@ class _ChallanCard extends StatelessWidget {
         ? (item.deliverdQty / item.untitQty).clamp(0.0, 1.0)
         : 0.0;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border(left: BorderSide(color: accentColor, width: 3)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      // ── Navigate to details page ────────────────────────────────
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChallanDetailsView(
+            challanId: item.challanId,
+            orderNo: item.orderNo,
+            accentColor: accentColor,
           ),
-        ],
+        ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Top row ──────────────────────────────────────────
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  item.orderNo,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    statusLabel,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: statusColor,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 8),
-
-            // ── Date + Challan ID ─────────────────────────────────
-            Row(
-              children: [
-                const Icon(
-                  Icons.calendar_today_rounded,
-                  size: 12,
-                  color: Colors.black38,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _formatDate(item.orderDate),
-                  style: const TextStyle(fontSize: 12, color: Colors.black45),
-                ),
-                const SizedBox(width: 14),
-                const Icon(Icons.tag_rounded, size: 12, color: Colors.black38),
-                const SizedBox(width: 4),
-                Text(
-                  'Challan #${item.challanId}',
-                  style: const TextStyle(fontSize: 12, color: Colors.black45),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 12),
-
-            // ── Progress Bar ──────────────────────────────────────
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 5,
-                backgroundColor: accentColor.withValues(alpha: 0.12),
-                valueColor: AlwaysStoppedAnimation<Color>(accentColor),
-              ),
-            ),
-
-            const SizedBox(height: 10),
-
-            // ── Qty Row ───────────────────────────────────────────
-            Row(
-              children: [
-                _QtyBadge(
-                  label: 'Ordered',
-                  value: '${item.untitQty}',
-                  color: Colors.black54,
-                ),
-                const SizedBox(width: 8),
-                _QtyBadge(
-                  label: 'Delivered',
-                  value: '${item.deliverdQty}',
-                  color: const Color(0xFF4CAF50),
-                ),
-                const SizedBox(width: 8),
-                _QtyBadge(
-                  label: 'Pending',
-                  value: '$pendingQty',
-                  color: pendingQty > 0
-                      ? const Color(0xFFFF5722)
-                      : Colors.black26,
-                ),
-              ],
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border(left: BorderSide(color: accentColor, width: 3)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
           ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    item.orderNo,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Date + Challan ID
+              Row(
+                children: [
+                  const Icon(
+                    Icons.calendar_today_rounded,
+                    size: 12,
+                    color: Colors.black38,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatDate(item.orderDate),
+                    style: const TextStyle(fontSize: 12, color: Colors.black45),
+                  ),
+                  const SizedBox(width: 14),
+                  const Icon(
+                    Icons.tag_rounded,
+                    size: 12,
+                    color: Colors.black38,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Challan #${item.challanId}',
+                    style: const TextStyle(fontSize: 12, color: Colors.black45),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              // Progress
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 5,
+                  backgroundColor: accentColor.withValues(alpha: 0.12),
+                  valueColor: AlwaysStoppedAnimation<Color>(accentColor),
+                ),
+              ),
+              const SizedBox(height: 10),
+              // Qty badges
+              Row(
+                children: [
+                  _QtyBadge(
+                    label: 'Ordered',
+                    value: '${item.untitQty}',
+                    color: Colors.black54,
+                  ),
+                  const SizedBox(width: 8),
+                  _QtyBadge(
+                    label: 'Delivered',
+                    value: '${item.deliverdQty}',
+                    color: const Color(0xFF4CAF50),
+                  ),
+                  const SizedBox(width: 8),
+                  _QtyBadge(
+                    label: 'Pending',
+                    value: '$pendingQty',
+                    color: pendingQty > 0
+                        ? const Color(0xFFFF5722)
+                        : Colors.black26,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -409,7 +423,6 @@ class _QtyBadge extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-
   const _QtyBadge({
     required this.label,
     required this.value,
@@ -446,8 +459,6 @@ class _QtyBadge extends StatelessWidget {
   }
 }
 
-// ── Shimmer ───────────────────────────────────────────────────────────────────
-
 class _ChallanShimmer extends StatefulWidget {
   const _ChallanShimmer();
   @override
@@ -458,7 +469,6 @@ class _ChallanShimmerState extends State<_ChallanShimmer>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final Animation<double> _anim;
-
   @override
   void initState() {
     super.initState();
@@ -540,13 +550,10 @@ class _ChallanShimmerState extends State<_ChallanShimmer>
   );
 }
 
-// ── Empty ─────────────────────────────────────────────────────────────────────
-
 class _EmptyView extends StatelessWidget {
   final String label;
   final IconData icon;
   const _EmptyView({required this.label, required this.icon});
-
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -569,13 +576,10 @@ class _EmptyView extends StatelessWidget {
   }
 }
 
-// ── Error ─────────────────────────────────────────────────────────────────────
-
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
   const _ErrorView({required this.message, required this.onRetry});
-
   @override
   Widget build(BuildContext context) {
     return Center(

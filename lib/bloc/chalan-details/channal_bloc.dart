@@ -1,89 +1,67 @@
-import 'package:bloc/bloc.dart';
-import 'package:marketing/services/challan_details.dart';
+// ════════════════════════════════════════════════════════════════════════════
+// BLOC  (Event + State + Bloc in one file)
+// lib/bloc/challan-details/challan_details_bloc.dart
+// ════════════════════════════════════════════════════════════════════════════
+
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:marketing/bloc/chalan-details/repository/chalan_details_repo.dart';
 import 'package:marketing/services/models/chalan_details.dart';
 
-// ---------------Event Classes----------------
+import 'package:marketing/services/provider/current_user.dart';
 
-abstract class ChallanEventDetails {
-  const ChallanEventDetails();
-}
+// ── Events ───────────────────────────────────────────────────────────────────
 
-class FetchChallanDetails extends ChallanEventDetails {
-  final int partyId;
-  final int compId;
+abstract class ChallanDetailsEvent {}
+
+class FetchChallanDetails extends ChallanDetailsEvent {
   final int challanId;
-  final String token;
-
-  const FetchChallanDetails({
-    required this.partyId,
-    required this.compId,
-    required this.challanId,
-    required this.token,
-  });
+  FetchChallanDetails({required this.challanId});
 }
 
-class ClearChallanDetails extends ChallanEventDetails {}
+// ── States ───────────────────────────────────────────────────────────────────
 
-// ---------------State Classes----------------
+abstract class ChallanDetailsState {}
 
-abstract class ChallanState {
-  const ChallanState();
+class ChallanDetailsInitial extends ChallanDetailsState {}
+
+class ChallanDetailsLoading extends ChallanDetailsState {}
+
+class ChallanDetailsLoaded extends ChallanDetailsState {
+  final ChallanDetailsModel details;
+  ChallanDetailsLoaded(this.details);
 }
 
-class ChallanInitial extends ChallanState {}
-
-class ChallanLoading extends ChallanState {}
-
-class ChallanLoaded extends ChallanState {
-  final ChallanDetail challanDetail;
-
-  const ChallanLoaded(this.challanDetail);
-}
-
-class ChallanError extends ChallanState {
+class ChallanDetailsError extends ChallanDetailsState {
   final String message;
-
-  const ChallanError(this.message);
+  ChallanDetailsError(this.message);
 }
 
-// ---------------Bloc Implementation----------------
+// ── Bloc ─────────────────────────────────────────────────────────────────────
 
-class ChallanBlocDetails extends Bloc<ChallanEventDetails, ChallanState> {
-  final ChallanService challanService;
+class ChallanDetailsBloc
+    extends Bloc<ChallanDetailsEvent, ChallanDetailsState> {
+  final ChallanDetailsRepository repository;
 
-  ChallanBlocDetails({required this.challanService}) : super(ChallanInitial()) {
-    on<FetchChallanDetails>(_onFetchChallanDetails);
-    on<ClearChallanDetails>(_onClearChallanDetails);
+  ChallanDetailsBloc({required this.repository})
+    : super(ChallanDetailsInitial()) {
+    on<FetchChallanDetails>(_onFetch);
   }
 
-  Future<void> _onFetchChallanDetails(
+  Future<void> _onFetch(
     FetchChallanDetails event,
-    Emitter<ChallanState> emit,
+    Emitter<ChallanDetailsState> emit,
   ) async {
-    emit(ChallanLoading());
-
+    emit(ChallanDetailsLoading());
     try {
-      final response = await challanService.getChallanDetails(
-        partyId: event.partyId,
-        compId: event.compId,
+      final details = await repository.getChallanDetails(
+        partyId: 222, // static getter
+        compId: CurrentUser.compId, // static getter
         challanId: event.challanId,
-        token: event.token,
+        token: CurrentUser.token, // static getter
       );
-
-      if (response.result.result.isNotEmpty) {
-        emit(ChallanLoaded(response.result.result.first));
-      } else {
-        emit(const ChallanError('No challan details found'));
-      }
+      emit(ChallanDetailsLoaded(details));
     } catch (e) {
-      emit(ChallanError(e.toString()));
+      emit(ChallanDetailsError(e.toString()));
     }
-  }
-
-  void _onClearChallanDetails(
-    ClearChallanDetails event,
-    Emitter<ChallanState> emit,
-  ) {
-    emit(ChallanInitial());
   }
 }

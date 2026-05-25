@@ -23,19 +23,19 @@ class ChallanRepository {
       headers: {'accept': '*/*', 'Authorization': 'Bearer $token'},
     );
 
-    dev.log(
-      '[ChallanRepo] status=${response.statusCode}',
-      name: 'ChallanRepository',
-    );
+    // dev.log(
+    //   '[ChallanRepo] status=${response.statusCode}',
+    //   name: 'ChallanRepository',
+    // );
 
     if (response.statusCode == 200) {
       final Map<String, dynamic> data = jsonDecode(response.body);
 
       if (data['status'] != true) {
-        dev.log(
-          '[ChallanRepo] types=$types status!=true → []',
-          name: 'ChallanRepository',
-        );
+        // dev.log(
+        //   '[ChallanRepo] types=$types status!=true → []',
+        //   name: 'ChallanRepository',
+        // );
         return [];
       }
 
@@ -50,31 +50,31 @@ class ChallanRepository {
       if (list.isEmpty) return [];
 
       // ── Print every raw item so we can see exact field names & types ──
-      for (int i = 0; i < list.length && i < 3; i++) {
-        dev.log(
-          '[ChallanRepo] types=$types item[$i] = ${list[i]}',
-          name: 'ChallanRepository',
-        );
-      }
+      // for (int i = 0; i < list.length && i < 3; i++) {
+      //   dev.log(
+      //     '[ChallanRepo] types=$types item[$i] = ${list[i]}',
+      //     name: 'ChallanRepository',
+      //   );
+      // }
 
       final result = <ChallanBillModel>[];
       for (int i = 0; i < list.length; i++) {
         final item = list[i];
         if (item is! Map<String, dynamic>) {
-          dev.log(
-            '[ChallanRepo] types=$types item[$i] skipped — not a Map: ${item.runtimeType}',
-            name: 'ChallanRepository',
-          );
+          // dev.log(
+          //   '[ChallanRepo] types=$types item[$i] skipped — not a Map: ${item.runtimeType}',
+          //   name: 'ChallanRepository',
+          // );
           continue;
         }
         try {
           result.add(ChallanBillModel.fromJson(item));
         } catch (e) {
           // Print the full item and which field failed so we can fix the model
-          dev.log(
-            '[ChallanRepo] types=$types item[$i] FAILED: $e\nraw=$item',
-            name: 'ChallanRepository',
-          );
+          // dev.log(
+          //   '[ChallanRepo] types=$types item[$i] FAILED: $e\nraw=$item',
+          //   name: 'ChallanRepository',
+          // );
         }
       }
       return result;
