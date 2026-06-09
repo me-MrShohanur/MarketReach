@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:marketing/bloc/chalan-deleiver/update_chalan.dart';
 import 'package:marketing/bloc/chalan-details/channal_bloc.dart';
 import 'package:marketing/bloc/chalan-details/repository/chalan_details_repo.dart';
+
 import 'package:marketing/services/models/chalan_details.dart';
 
 class ChallanDetailsView extends StatelessWidget {
@@ -91,6 +93,7 @@ class _ChallanDetailsBody extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ── Header ───────────────────────────────────────────────
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
                   child: Row(
@@ -168,6 +171,7 @@ class _ChallanDetailsBody extends StatelessWidget {
                     ],
                   ),
                 ),
+
                 Expanded(child: _buildBody(context, state)),
               ],
             );
@@ -178,8 +182,9 @@ class _ChallanDetailsBody extends StatelessWidget {
   }
 
   Widget _buildBody(BuildContext context, ChallanDetailsState state) {
-    if (state is ChallanDetailsLoading || state is ChallanDetailsInitial)
+    if (state is ChallanDetailsLoading || state is ChallanDetailsInitial) {
       return const _DetailsShimmer();
+    }
     if (state is ChallanDetailsError) {
       return _ErrorView(
         message: state.message,
@@ -229,6 +234,7 @@ class _DetailsContent extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Summary chips
           IntrinsicHeight(
             child: Row(
               children: [
@@ -250,6 +256,7 @@ class _DetailsContent extends StatelessWidget {
           ),
           const SizedBox(height: 14),
 
+          // Challan Info Card
           _InfoCard(
             icon: Icons.local_shipping_rounded,
             iconColor: accentColor,
@@ -280,6 +287,7 @@ class _DetailsContent extends StatelessWidget {
           ),
 
           const SizedBox(height: 20),
+
           _SectionLabel(
             icon: Icons.list_alt_rounded,
             label: 'Products (${data.details.length})',
@@ -309,6 +317,7 @@ class _DetailsContent extends StatelessWidget {
                 index: e.key + 1,
                 item: e.value,
                 accentColor: accentColor,
+                challanId: data.challanId,
               ),
             ),
 
@@ -348,18 +357,20 @@ class _DetailsContent extends StatelessWidget {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// PRODUCT CARD — Edit Button in Top Right
+// PRODUCT CARD  — Edit button wired to UpdateChallanBloc
 // ════════════════════════════════════════════════════════════════════════════
 
 class _ProductCard extends StatefulWidget {
   final int index;
   final ChallanDetailItem item;
   final Color accentColor;
+  final int challanId;
 
   const _ProductCard({
     required this.index,
     required this.item,
     required this.accentColor,
+    required this.challanId,
   });
 
   @override
@@ -377,27 +388,26 @@ class _ProductCardState extends State<_ProductCard> {
     _returnQty = widget.item.returnQty;
   }
 
-  void _showUpdatePopup() {
+  void _showUpdateSheet() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _UpdateFieldsSheet(
-        initialRemarks: _remarks,
-        initialReturnQty: _returnQty,
-        maxQty: widget.item.unitQty.abs(),
-        accentColor: widget.accentColor,
-        onUpdate: (newRemarks, newReturnQty) {
-          setState(() {
-            _remarks = newRemarks;
-            _returnQty = newReturnQty;
-          });
-          print('=== UPDATE LOG ===');
-          print('Product: ${widget.item.name} (ID: ${widget.item.productId})');
-          print('Remarks: $newRemarks');
-          print('Return Qty: $newReturnQty');
-          print('==================');
-        },
+      builder: (_) => BlocProvider(
+        create: (_) => UpdateChallanBloc(),
+        child: _UpdateFieldsSheet(
+          item: widget.item,
+          challanId: widget.challanId,
+          initialRemarks: _remarks,
+          initialReturnQty: _returnQty,
+          accentColor: widget.accentColor,
+          onLocalUpdate: (newRemarks, newReturnQty) {
+            setState(() {
+              _remarks = newRemarks;
+              _returnQty = newReturnQty;
+            });
+          },
+        ),
       ),
     );
   }
@@ -426,7 +436,7 @@ class _ProductCardState extends State<_ProductCard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header with Edit Button
+            // ── Header row ──────────────────────────────────────────────
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -460,24 +470,82 @@ class _ProductCardState extends State<_ProductCard> {
                     ),
                   ],
                 ),
-                GestureDetector(
-                  onTap: _showUpdatePopup,
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(8),
+                // Edit button — only shown when not approved
+                if (widget.item.isApproved == 0)
+                  GestureDetector(
+                    onTap: _showUpdateSheet,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: widget.accentColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: widget.accentColor.withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.edit_rounded,
+                            size: 14,
+                            color: widget.accentColor,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            'Edit',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: widget.accentColor,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: Icon(
-                      Icons.edit_rounded,
-                      size: 18,
-                      color: widget.accentColor,
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Colors.green.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.check_circle_outline_rounded,
+                          size: 13,
+                          color: Colors.green,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'Approved',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.green,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
               ],
             ),
+
             const SizedBox(height: 6),
+
+            // Description tag
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
@@ -496,8 +564,10 @@ class _ProductCardState extends State<_ProductCard> {
                 ),
               ),
             ),
+
             const SizedBox(height: 12),
 
+            // Qty + Rate badges
             Wrap(
               spacing: 8,
               runSpacing: 6,
@@ -510,11 +580,12 @@ class _ProductCardState extends State<_ProductCard> {
                 ),
               ],
             ),
+
             const SizedBox(height: 12),
             Divider(height: 1, color: Colors.grey.shade100, thickness: 1),
             const SizedBox(height: 10),
 
-            // Normal Fields (non-clickable)
+            // Remarks & Return Qty — update locally after edit
             _InfoRow(
               label: 'Remarks',
               value: _remarks.isEmpty ? '—' : _remarks,
@@ -529,6 +600,7 @@ class _ProductCardState extends State<_ProductCard> {
             Divider(height: 1, color: Colors.grey.shade100, thickness: 1),
             const SizedBox(height: 10),
 
+            // Net amount
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -559,22 +631,25 @@ class _ProductCardState extends State<_ProductCard> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// UPDATE POPUP
+// UPDATE FIELDS SHEET  — blank fields + auto-focus on notes
 // ════════════════════════════════════════════════════════════════════════════
 
 class _UpdateFieldsSheet extends StatefulWidget {
+  final ChallanDetailItem item;
   final String initialRemarks;
   final int initialReturnQty;
-  final int maxQty;
   final Color accentColor;
-  final Function(String, int) onUpdate;
+  final int challanId;
+
+  final void Function(String remarks, int returnQty) onLocalUpdate;
 
   const _UpdateFieldsSheet({
+    required this.item,
     required this.initialRemarks,
     required this.initialReturnQty,
-    required this.maxQty,
     required this.accentColor,
-    required this.onUpdate,
+    required this.onLocalUpdate,
+    required this.challanId,
   });
 
   @override
@@ -582,133 +657,478 @@ class _UpdateFieldsSheet extends StatefulWidget {
 }
 
 class _UpdateFieldsSheetState extends State<_UpdateFieldsSheet> {
-  late final TextEditingController _remarksCtrl;
-  late final TextEditingController _returnCtrl;
+  late final TextEditingController _notesCtrl;
+  late final TextEditingController _returnQtyCtrl;
+  late final FocusNode _notesFocus; // ← NEW
+
+  final DateTime _today = DateTime.now();
+
+  static String _fmtForApi(DateTime d) =>
+      '${d.year}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
+
+  static String _fmtDisplay(DateTime d) {
+    const months = [
+      '',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${d.day.toString().padLeft(2, '0')} ${months[d.month]} ${d.year}';
+  }
 
   @override
   void initState() {
     super.initState();
-    _remarksCtrl = TextEditingController(text: widget.initialRemarks);
-    _returnCtrl = TextEditingController(
-      text: widget.initialReturnQty == 0 ? '' : '${widget.initialReturnQty}',
-    );
+    // ── Always start blank ───────────────────────────────────────────────
+    _notesCtrl = TextEditingController();
+    _returnQtyCtrl = TextEditingController();
+    _notesFocus = FocusNode();
+
+    // ── Request focus on notes field after the sheet finishes building ───
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _notesFocus.requestFocus();
+    });
   }
 
   @override
   void dispose() {
-    _remarksCtrl.dispose();
-    _returnCtrl.dispose();
+    _notesCtrl.dispose();
+    _returnQtyCtrl.dispose();
+    _notesFocus.dispose(); // ← NEW
     super.dispose();
   }
 
-  void _update() {
-    final remarks = _remarksCtrl.text.trim();
-    final returnQty = int.tryParse(_returnCtrl.text.trim()) ?? 0;
-    widget.onUpdate(remarks, returnQty);
-    Navigator.pop(context);
+  void _submit() {
+    final notes = _notesCtrl.text.trim();
+    final returnQty = int.tryParse(_returnQtyCtrl.text.trim()) ?? 0;
+
+    context.read<UpdateChallanBloc>().add(
+      SubmitUpdateChallan(
+        UpdateChallanRequest(
+          id: widget.item.autoChallanId,
+          challanId: widget.challanId,
+          qty: returnQty,
+          notes: notes,
+          returnDate: _today,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottom),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
+
+    return BlocListener<UpdateChallanBloc, UpdateChallanState>(
+      listener: (context, state) {
+        if (state is UpdateChallanSuccess) {
+          widget.onLocalUpdate(
+            _notesCtrl.text.trim(),
+            int.tryParse(_returnQtyCtrl.text.trim()) ?? 0,
+          );
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: const [
+                  Icon(
+                    Icons.check_circle_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  SizedBox(width: 10),
+                  Text(
+                    'Challan updated successfully',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+              backgroundColor: const Color(0xFF4CAF50),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        } else if (state is UpdateChallanFailure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      state.error,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.redAccent,
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        decoration: const BoxDecoration(
+          color: Color(0xFFF5F5F5),
+          borderRadius: BorderRadius.all(Radius.circular(24)),
+        ),
+        padding: EdgeInsets.fromLTRB(20, 16, 20, 20 + bottom),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Drag handle ─────────────────────────────────────────────
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.black12,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Sheet header ─────────────────────────────────────────────
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Edit Details',
+                      style: TextStyle(fontSize: 13, color: Colors.black45),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      widget.item.name,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: widget.accentColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: widget.accentColor.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    'Qty: ${widget.item.unitQty.abs()}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: widget.accentColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── Return Date — read-only, shows today ─────────────────────
+            const Text(
+              'Return Date',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.black45,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: const Border(
+                  left: BorderSide(color: Color(0xFF2196F3), width: 3),
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0D000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE3F2FD),
+                      borderRadius: BorderRadius.circular(9),
+                    ),
+                    child: const Icon(
+                      Icons.calendar_today_rounded,
+                      size: 16,
+                      color: Color(0xFF2196F3),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _fmtDisplay(_today),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      Text(
+                        'API value: ${_fmtForApi(_today)}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: Colors.black38,
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  const Icon(
+                    Icons.lock_outline_rounded,
+                    size: 14,
+                    color: Colors.black26,
+                  ),
+                ],
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            'Update Fields',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: widget.accentColor,
-            ),
-          ),
-          const SizedBox(height: 20),
 
-          const Text(
-            'Remarks',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _remarksCtrl,
-            maxLines: 3,
-            decoration: InputDecoration(
-              hintText: 'Enter remarks...',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: widget.accentColor),
+            const SizedBox(height: 14),
+
+            // ── Notes field ──────────────────────────────────────────────
+            const Text(
+              'Notes',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.black45,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.2,
               ),
             ),
-          ),
-
-          const SizedBox(height: 16),
-          const Text(
-            'Return Quantity',
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _returnCtrl,
-            keyboardType: TextInputType.number,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            decoration: InputDecoration(
-              hintText: '0',
-              suffixText: 'units',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+            const SizedBox(height: 6),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0D000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 3),
+                  ),
+                ],
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: widget.accentColor),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: _update,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: widget.accentColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+              child: TextField(
+                controller: _notesCtrl,
+                focusNode: _notesFocus, // ← NEW
+                maxLines: 3,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Add notes here...',
+                  hintStyle: const TextStyle(
+                    color: Colors.black26,
+                    fontSize: 13,
+                  ),
+                  contentPadding: const EdgeInsets.all(14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
                 ),
               ),
-              child: const Text(
-                'Update',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
+            ),
+
+            const SizedBox(height: 14),
+
+            // ── Return Qty field ─────────────────────────────────────────
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Return Qty',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.black45,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+                Text(
+                  'Max: ${widget.item.unitQty.abs()} units',
+                  style: const TextStyle(fontSize: 11, color: Colors.black38),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x0D000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: TextField(
+                controller: _returnQtyCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+                decoration: InputDecoration(
+                  hintText: '0',
+                  hintStyle: const TextStyle(color: Colors.black26),
+                  suffixText: 'units',
+                  suffixStyle: const TextStyle(
+                    color: Colors.black38,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 14,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Colors.white,
                 ),
               ),
             ),
-          ),
-        ],
+
+            const SizedBox(height: 20),
+
+            // ── Submit button — reacts to BLoC loading state ─────────────
+            BlocBuilder<UpdateChallanBloc, UpdateChallanState>(
+              builder: (context, state) {
+                final isLoading = state is UpdateChallanLoading;
+                return GestureDetector(
+                  onTap: isLoading ? null : _submit,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    width: double.infinity,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: isLoading ? Colors.black38 : Colors.black,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: isLoading
+                          ? []
+                          : const [
+                              BoxShadow(
+                                color: Color(0x26000000),
+                                blurRadius: 12,
+                                offset: Offset(0, 6),
+                              ),
+                            ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (isLoading) ...[
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          const Text(
+                            'Updating…',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ] else ...[
+                          const Icon(
+                            Icons.check_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Update Challan',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              letterSpacing: -0.1,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -722,6 +1142,7 @@ class _SummaryChip extends StatelessWidget {
   final String label, value;
   final IconData icon;
   final Color color;
+
   const _SummaryChip({
     required this.label,
     required this.value,
@@ -848,6 +1269,7 @@ class _InfoCard extends StatelessWidget {
 class _InfoRow extends StatelessWidget {
   final String label, value;
   final bool isLast;
+
   const _InfoRow({
     required this.label,
     required this.value,
@@ -886,6 +1308,7 @@ class _SectionLabel extends StatelessWidget {
   final IconData icon;
   final String label;
   final Color color;
+
   const _SectionLabel({
     required this.icon,
     required this.label,
@@ -924,6 +1347,7 @@ class _SectionLabel extends StatelessWidget {
 class _Badge extends StatelessWidget {
   final String label, value;
   final Color color;
+
   const _Badge({required this.label, required this.value, required this.color});
 
   @override
@@ -954,9 +1378,11 @@ class _Badge extends StatelessWidget {
   );
 }
 
-// Shimmer
+// ─── Shimmer ──────────────────────────────────────────────────────────────────
+
 class _DetailsShimmer extends StatefulWidget {
   const _DetailsShimmer();
+
   @override
   State<_DetailsShimmer> createState() => _DetailsShimmerState();
 }
@@ -996,98 +1422,99 @@ class _DetailsShimmerState extends State<_DetailsShimmer>
           IntrinsicHeight(
             child: Row(
               children: [
-                Expanded(child: _fbox(double.infinity, 64)),
+                Expanded(child: _shimmerBox(height: 64)),
                 const SizedBox(width: 10),
-                Expanded(child: _fbox(double.infinity, 64)),
+                Expanded(child: _shimmerBox(height: 64)),
               ],
             ),
           ),
           const SizedBox(height: 14),
-          _card(rows: 9),
+          _shimmerBox(height: 220),
           const SizedBox(height: 20),
           _bar(120, 16),
           const SizedBox(height: 12),
-          _product(),
-          _product(),
+          _shimmerBox(height: 160),
+          const SizedBox(height: 12),
+          _shimmerBox(height: 160),
         ],
       ),
     ),
   );
 
-  Widget _card({required int rows}) => Opacity(
-    opacity: _anim.value,
-    child: Container(/* your original card shimmer code */),
-  );
-  Widget _product() => Opacity(
-    opacity: _anim.value,
-    child: Container(/* your original product shimmer */),
-  );
-  Widget _bar(double w, double h, {double r = 6}) => Container(
-    width: w == double.infinity ? null : w,
-    height: h,
-    decoration: BoxDecoration(
-      color: Colors.grey.shade200,
-      borderRadius: BorderRadius.circular(r),
-    ),
-  );
-  Widget _fbox(double w, double h) => Opacity(
+  Widget _shimmerBox({required double height}) => Opacity(
     opacity: _anim.value,
     child: Container(
-      width: w == double.infinity ? null : w,
-      height: h,
+      height: height,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _bar(double w, double h) => Opacity(
+    opacity: _anim.value,
+    child: Container(
+      width: w,
+      height: h,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(6),
       ),
     ),
   );
 }
 
+// ─── Error View ───────────────────────────────────────────────────────────────
+
 class _ErrorView extends StatelessWidget {
   final String message;
   final VoidCallback onRetry;
+
   const _ErrorView({required this.message, required this.onRetry});
 
   @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.wifi_off_rounded, size: 48, color: Colors.red.shade300),
-            const SizedBox(height: 14),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: Colors.black45),
-            ),
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: onRetry,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'Retry',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
+  Widget build(BuildContext context) => Center(
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.wifi_off_rounded, size: 48, color: Colors.red.shade300),
+          const SizedBox(height: 14),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 13, color: Colors.black45),
+          ),
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: onRetry,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Retry',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }
