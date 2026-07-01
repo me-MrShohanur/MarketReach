@@ -7,7 +7,8 @@ abstract class ChallanEvent {}
 
 class FetchChallanBill extends ChallanEvent {
   final int types;
-  FetchChallanBill({this.types = 2});
+  final int partyId;
+  FetchChallanBill({this.types = 2, required this.partyId});
 }
 
 //-------------------State------------------//
@@ -43,7 +44,7 @@ class DeliveryListBloc extends Bloc<ChallanEvent, ChallanState> {
     emit(ChallanLoading());
     try {
       final challans = await repository.getChallanBill(
-        partyId: 222,
+        partyId: event.partyId,
         compId: CurrentUser.compId,
         types: event.types,
         token: CurrentUser.token,
@@ -54,3 +55,55 @@ class DeliveryListBloc extends Bloc<ChallanEvent, ChallanState> {
     }
   }
 }
+
+// abstract class ChallanEvent {}
+
+// class FetchChallanBill extends ChallanEvent {
+//   final int types;
+//   FetchChallanBill({this.types = 2});
+// }
+
+// //-------------------State------------------//
+
+// abstract class ChallanState {}
+
+// class ChallanInitial extends ChallanState {}
+
+// class ChallanLoading extends ChallanState {}
+
+// class ChallanLoaded extends ChallanState {
+//   final List<ChallanBillModel> challans;
+//   ChallanLoaded(this.challans);
+// }
+
+// class ChallanError extends ChallanState {
+//   final String message;
+//   ChallanError(this.message);
+// }
+
+// //-------------------Bloc------------------//
+// class DeliveryListBloc extends Bloc<ChallanEvent, ChallanState> {
+//   final ChallanRepository repository;
+
+//   DeliveryListBloc({required this.repository}) : super(ChallanInitial()) {
+//     on<FetchChallanBill>(_onFetchChallanBill);
+//   }
+
+//   Future<void> _onFetchChallanBill(
+//     FetchChallanBill event,
+//     Emitter<ChallanState> emit,
+//   ) async {
+//     emit(ChallanLoading());
+//     try {
+//       final challans = await repository.getChallanBill(
+//         partyId: 222,
+//         compId: CurrentUser.compId,
+//         types: event.types,
+//         token: CurrentUser.token,
+//       );
+//       emit(ChallanLoaded(challans));
+//     } catch (e) {
+//       emit(ChallanError(e.toString()));
+//     }
+//   }
+// }

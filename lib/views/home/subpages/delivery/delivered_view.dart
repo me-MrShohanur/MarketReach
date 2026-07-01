@@ -17,7 +17,7 @@ class DeliveredView extends StatelessWidget {
     return BlocProvider(
       create: (_) =>
           DeliveryListBloc(repository: ChallanRepository())
-            ..add(FetchChallanBill(types: 2)),
+            ..add(FetchChallanBill(types: 2, partyId: 222)),
       child: const _DeliveredBody(),
     );
   }
@@ -132,7 +132,7 @@ class _DeliveredBody extends StatelessWidget {
                     return _ErrorView(
                       message: state.message,
                       onRetry: () => context.read<DeliveryListBloc>().add(
-                        FetchChallanBill(types: 2),
+                        FetchChallanBill(types: 2, partyId: 222),
                       ),
                     );
                   }

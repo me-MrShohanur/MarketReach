@@ -45,6 +45,9 @@ class _CreateOrderViewState extends State<CreateOrderView> {
   // Calculate total discount from all products in cart
   double get _totalDiscount => _cart.fold(0, (s, p) => s + p.cartDiscountAmt);
 
+  // Calculate total quantity across all products in cart
+  double get _totalQty => _cart.fold(0, (s, p) => s + p.cartQty);
+
   double get _subtotal => _cart.fold(0, (s, p) => s + (p.cartQty * p.cartRate));
   double get _total => _subtotal - _totalDiscount + tax;
 
@@ -312,6 +315,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                             )
                           : _CartList(
                               items: _cart,
+                              totalQty: _totalQty,
                               onRemove: (i) =>
                                   setState(() => _cart.removeAt(i)),
                               onAddMore: _openSheet,
@@ -323,6 +327,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
                       _AccentCard(
                         accent: const Color(0xFF4CAF50),
                         child: _SummaryCardContent(
+                          totalQty: _totalQty,
                           subtotal: _subtotal,
                           discount: _totalDiscount, // Show total discount
                           tax: tax,
@@ -493,9 +498,11 @@ class _PlainCard extends StatelessWidget {
 // ─── Summary Card Content (READ-ONLY Version) ─────────────────────────────────
 
 class _SummaryCardContent extends StatelessWidget {
+  final double totalQty;
   final double subtotal, discount, tax, total;
 
   const _SummaryCardContent({
+    required this.totalQty,
     required this.subtotal,
     required this.discount,
     required this.tax,
@@ -516,6 +523,11 @@ class _SummaryCardContent extends StatelessWidget {
               color: Colors.black45,
               letterSpacing: 0.2,
             ),
+          ),
+          const SizedBox(height: 12),
+          _SummaryRow(
+            label: 'Total Quantity',
+            value: totalQty.toStringAsFixed(0),
           ),
           const SizedBox(height: 12),
           _SummaryRow(
@@ -1424,11 +1436,13 @@ class _EmptyCart extends StatelessWidget {
 
 class _CartList extends StatelessWidget {
   final List<ProductModel> items;
+  final double totalQty;
   final ValueChanged<int> onRemove;
   final VoidCallback onAddMore;
 
   const _CartList({
     required this.items,
+    required this.totalQty,
     required this.onRemove,
     required this.onAddMore,
   });
@@ -1443,24 +1457,51 @@ class _CartList extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.shopping_cart_outlined,
-                      size: 18,
-                      color: Colors.black45,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${items.length} item${items.length == 1 ? '' : 's'}',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: -0.2,
+                Expanded(
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.shopping_cart_outlined,
+                        size: 18,
+                        color: Colors.black45,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          '${items.length} item${items.length == 1 ? '' : 's'}',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.2,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // ── Total Qty pill ──
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          'Qty ${totalQty.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF4CAF50),
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 8),
                 GestureDetector(
                   onTap: onAddMore,
                   child: Container(
@@ -1473,6 +1514,7 @@ class _CartList extends StatelessWidget {
                       borderRadius: BorderRadius.circular(9),
                     ),
                     child: const Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.add_rounded, color: Colors.white, size: 14),
                         SizedBox(width: 4),
@@ -1517,6 +1559,7 @@ class _CartTile extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 40,
@@ -1545,21 +1588,50 @@ class _CartTile extends StatelessWidget {
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 6),
+
+                // Qty badge + rate
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE8F5E9),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        'Qty ${product.cartQty.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF4CAF50),
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                    ),
+                    // const SizedBox(width: 8),
+                    // Text(
+                    //   '৳${product.cartRate.toStringAsFixed(2)} each',
+                    //   style: const TextStyle(
+                    //     fontSize: 12,
+                    //     color: Colors.black45,
+                    //   ),
+                    // ),
+                  ],
+                ),
+
+                const SizedBox(height: 4),
+
+                // Discount + net amount
                 Wrap(
                   spacing: 8,
                   children: [
-                    Text(
-                      '${product.cartQty.toStringAsFixed(0)} × '
-                      '৳${product.cartRate.toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black45,
-                      ),
-                    ),
                     if (product.cartDiscountAmt > 0)
                       Text(
-                        '-৳${product.cartDiscountAmt.toStringAsFixed(2)}',
+                        '-৳${product.cartDiscountAmt.toStringAsFixed(2)} off',
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,

@@ -508,6 +508,7 @@ class _OrderCard extends StatelessWidget {
             ),
           ],
         ),
+
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(

@@ -1,18 +1,3 @@
-// ════════════════════════════════════════════════════════════════════════════
-// HOME VIEW — Fully Responsive & Dynamic UI
-// lib/views/home/home_view.dart
-//
-// RESPONSIVE STRATEGY (no external package needed):
-//   • All sizes derived from MediaQuery screen width via _R helper
-//   • Base design width = 390 (iPhone 14). Scale factor clamps to [0.78, 1.22]
-//     so nothing goes extreme on very small (320px) or very large (480px+) phones
-//   • sp()  → scaled font size
-//   • dp()  → scaled spacing / dimension
-//   • FittedBox on value text so numbers never overflow on tiny screens
-//   • maxLines + ellipsis on all label text
-//   • minHeight constraints on cards so they stay consistent regardless of content
-// ════════════════════════════════════════════════════════════════════════════
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -112,7 +97,7 @@ class _HomeViewState extends State<HomeView> {
     try {
       final results = await Future.wait([
         _challanRepository.getChallanBill(
-          partyId: 222,
+          partyId: 20191,
           compId: CurrentUser.compId,
           types: 1,
           token: CurrentUser.token,
@@ -1094,8 +1079,8 @@ class _HomeShimmerState extends State<_HomeShimmer>
     ),
   );
 }
-//-----------Old-----------
 
+//-----------Old-----------
 // import 'package:flutter/material.dart';
 // import 'package:flutter/services.dart';
 // import 'package:flutter_bloc/flutter_bloc.dart';
