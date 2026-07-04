@@ -97,19 +97,19 @@ class _HomeViewState extends State<HomeView> {
     try {
       final results = await Future.wait([
         _challanRepository.getChallanBill(
-          partyId: 20191,
+          partyId: CurrentUser.customerID,
           compId: CurrentUser.compId,
           types: 1,
           token: CurrentUser.token,
         ),
         _challanRepository.getChallanBill(
-          partyId: 222,
+          partyId: CurrentUser.customerID,
           compId: CurrentUser.compId,
           types: 2,
           token: CurrentUser.token,
         ),
         _challanRepository.getChallanBill(
-          partyId: 222,
+          partyId: CurrentUser.customerID,
           compId: CurrentUser.compId,
           types: 3,
           token: CurrentUser.token,
@@ -359,7 +359,7 @@ class _HomeViewState extends State<HomeView> {
                               Expanded(
                                 child: _StatCard(
                                   value: '$pendingCount',
-                                  label: 'Pending Orders',
+                                  label: 'Pending Confirm',
                                   accentColor: const Color(0xFFFFC107),
                                   onTap: () => _openOrders(
                                     context,

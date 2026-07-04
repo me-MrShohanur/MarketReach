@@ -10,6 +10,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:marketing/bloc/chalan-deleiver/block/chalan_bloc_list.dart';
 import 'package:marketing/bloc/chalan-deleiver/repository/get_chalan_repo.dart';
 import 'package:marketing/services/models/chalan_bill_model.dart';
+import 'package:marketing/services/provider/current_user.dart';
 import 'package:marketing/views/home/subpages/delivery/details/chalan_detail_view.dart';
 import 'package:marketing/views/home/subpages/delivery/pending_details.dart';
 
@@ -21,7 +22,7 @@ class PendingDeliveryView extends StatelessWidget {
     return BlocProvider(
       create: (_) =>
           DeliveryListBloc(repository: ChallanRepository())
-            ..add(FetchChallanBill(types: 1, partyId: 20191)),
+            ..add(FetchChallanBill(types: 1, partyId: CurrentUser.customerID)),
       child: const _PendingDeliveryBody(),
     );
   }
@@ -136,7 +137,10 @@ class _PendingDeliveryBody extends StatelessWidget {
                     return _ErrorView(
                       message: state.message,
                       onRetry: () => context.read<DeliveryListBloc>().add(
-                        FetchChallanBill(types: 1, partyId: 20191),
+                        FetchChallanBill(
+                          types: 1,
+                          partyId: CurrentUser.customerID,
+                        ),
                       ),
                     );
                   }
@@ -298,7 +302,8 @@ class _ChallanCard extends StatelessWidget {
           MaterialPageRoute(
             builder: (_) => PendingOrderDetailView(
               orderId: item.orderId, // ← comes from the tapped list item
-              partyId: 20191, // ← same — whatever party that order belongs to
+              partyId: CurrentUser
+                  .customerID, // ← same — whatever party that order belongs to
               orderNo: item.orderNo,
             ),
           ),

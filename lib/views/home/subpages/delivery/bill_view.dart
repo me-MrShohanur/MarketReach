@@ -8,6 +8,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:marketing/bloc/chalan-deleiver/block/chalan_bloc_list.dart';
 import 'package:marketing/bloc/chalan-deleiver/repository/get_chalan_repo.dart';
 import 'package:marketing/services/models/chalan_bill_model.dart';
+import 'package:marketing/services/provider/current_user.dart';
 import 'package:marketing/views/home/subpages/delivery/details/chalan_detail_view.dart';
 
 // ── accent colour for this page ──────────────────────────────────────────────
@@ -22,7 +23,7 @@ class BillView extends StatelessWidget {
     return BlocProvider(
       create: (_) =>
           DeliveryListBloc(repository: ChallanRepository())
-            ..add(FetchChallanBill(types: 3, partyId: 222)),
+            ..add(FetchChallanBill(types: 3, partyId: CurrentUser.customerID)),
       child: const _BillBody(),
     );
   }
@@ -137,7 +138,10 @@ class _BillBody extends StatelessWidget {
                     return _ErrorView(
                       message: state.message,
                       onRetry: () => context.read<DeliveryListBloc>().add(
-                        FetchChallanBill(types: 3, partyId: 222),
+                        FetchChallanBill(
+                          types: 3,
+                          partyId: CurrentUser.customerID,
+                        ),
                       ),
                     );
                   }

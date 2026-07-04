@@ -470,7 +470,7 @@ class _ConfirmApprovalButton extends StatelessWidget {
                         ),
                         SizedBox(width: 8),
                         Text(
-                          'Confirm Approval',
+                          'Confirm Order',
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
