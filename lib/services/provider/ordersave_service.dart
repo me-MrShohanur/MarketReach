@@ -56,6 +56,7 @@ class OrderSaveService {
     DateTime? chequeDate,
     String? shippingAddress,
     String? shippingContact,
+    required double netAmount,
   }) async {
     // ── Dates ─────────────────────────────────────────────────────────────
     final now = DateTime.now();
@@ -65,10 +66,10 @@ class OrderSaveService {
         : _formatDate(now);
 
     // ── Totals ────────────────────────────────────────────────────────────
-    final double subtotal = cart.fold(0.0, (s, p) => s + p.cartNetAmount);
-    final double netAmount = subtotal - discount;
+    // final double subtotal = cart.fold(0.0, (s, p) => s + p.cartNetAmount);
+    // final double netAmount = subtotal - discount;
     final double vatAmount = tax;
-    final double netPayable = netAmount + vatAmount;
+    // final double netPayable = netAmount + vatAmount;
 
     // ── Master ────────────────────────────────────────────────────────────
     final Map<String, dynamic> master = {
@@ -83,7 +84,7 @@ class OrderSaveService {
       'quoteId': 0,
       'status': 0,
       'netAmount': netAmount,
-      'netPayable': netPayable,
+      'netPayable': netAmount,
       'discountAmount': discount,
       'discountRate': 0,
       'vatAmount': vatAmount,
@@ -114,7 +115,10 @@ class OrderSaveService {
           ? ''
           : shippingContact.trim(),
       'shippingEmail': '',
-      'shippingContractName': '',
+      'shippingContractName':
+          (shippingContact == null || shippingContact.trim().isEmpty)
+          ? ''
+          : shippingContact.trim(),
       'city': '',
       'postalCode': '',
       'checkedNarration': '',

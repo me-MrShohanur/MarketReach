@@ -216,6 +216,7 @@ class _CreateOrderViewState extends State<CreateOrderView> {
         chequeDate: _chequeDate,
         shippingContact: _deliveryContactCtrl.text.trim(),
         shippingAddress: _deliveryAddressCtrl.text.trim(),
+        netAmount: _total,
       );
 
       if (!mounted) return;

@@ -54,7 +54,7 @@ class ChallanDetailsBloc
     emit(ChallanDetailsLoading());
     try {
       final details = await repository.getChallanDetails(
-        partyId: 222, // static getter
+        partyId: CurrentUser.customerID, // static getter
         compId: CurrentUser.compId, // static getter
         challanId: event.challanId,
         token: CurrentUser.token, // static getter

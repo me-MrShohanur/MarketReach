@@ -480,7 +480,7 @@ class _OrderCard extends StatelessWidget {
         return Colors.black45;
       case 0:
         return const Color(0xFFFFC107);
-      case 2:
+      case 1:
         return const Color(0xFF9C27B0);
       case 3:
         return const Color(0xFF2196F3);
