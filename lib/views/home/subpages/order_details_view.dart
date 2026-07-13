@@ -131,9 +131,8 @@ class _OrderDetailScaffold extends StatelessWidget {
         message: message,
         isApprove: isApprove,
         onDone: () {
-          // ✅ Close bottom sheet and pop detail page with refresh flag
-          Navigator.pop(context); // Close bottom sheet
-          Navigator.pop(context, true); // Pop detail page with refresh flag
+          Navigator.pop(context);
+          Navigator.pop(context, true);
         },
       ),
     );
@@ -256,12 +255,17 @@ class _DetailBody extends StatelessWidget {
 
   const _DetailBody({required this.order, required this.orderId});
 
+  // ✅ Check if order is in pending confirm status (status -1 or 0)
+  bool get _isPendingConfirm {
+    return order.status == -1 || order.status == 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Stack(
       children: [
         ListView(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
+          padding: EdgeInsets.fromLTRB(24, 0, 24, _isPendingConfirm ? 120 : 24),
           children: [
             // ── Order Image ──────────────────────────────────────────────────────
             if (order.base64File != null && order.base64File!.isNotEmpty)
@@ -416,16 +420,51 @@ class _DetailBody extends StatelessWidget {
                       ],
                     ),
             ),
+
+            // // ✅ Show message when order is not pending confirm
+            // if (!_isPendingConfirm) ...[
+            //   const SizedBox(height: 24),
+            //   Container(
+            //     padding: const EdgeInsets.all(16),
+            //     decoration: BoxDecoration(
+            //       color: Colors.grey.shade100,
+            //       borderRadius: BorderRadius.circular(12),
+            //       border: Border.all(color: Colors.grey.shade300),
+            //     ),
+            //     child: Row(
+            //       children: [
+            //         Icon(
+            //           Icons.info_outline_rounded,
+            //           color: Colors.grey.shade600,
+            //           size: 20,
+            //         ),
+            //         const SizedBox(width: 12),
+            //         Expanded(
+            //           child: Text(
+            //             'This order is already processed and cannot be approved or rejected.',
+            //             style: TextStyle(
+            //               fontSize: 13,
+            //               color: Colors.grey.shade700,
+            //               fontWeight: FontWeight.w500,
+            //             ),
+            //           ),
+            //         ),
+            //       ],
+            //     ),
+            //   ),
+            // ],
           ],
         ),
 
         // ── Floating Approval Slider ──────────────────────────────────────────
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 24,
-          child: _ApprovalSlider(orderId: orderId),
-        ),
+        // ✅ Only show for Pending Confirm orders (status -1 or 0)
+        if (_isPendingConfirm)
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 24,
+            child: _ApprovalSlider(orderId: orderId),
+          ),
       ],
     );
   }
@@ -578,245 +617,232 @@ class _ApprovalSliderState extends State<_ApprovalSlider>
       builder: (context, state) {
         final isLoading = state is OrderApprovalLoading;
 
-        return Container(
-          key: _trackKey,
-          height: _sliderHeight,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(32),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Listener(
-            onPointerDown: (e) => _onPointerDown(e, isLoading),
-            onPointerMove: (e) => _onPointerMove(e, isLoading),
-            onPointerUp: (_) => _handleRelease(isLoading),
-            onPointerCancel: (_) => _handleRelease(isLoading),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // ── Background Track ────────────────────────────────────────────
-                Container(
-                  height: _sliderHeight - 8,
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade50,
-                    borderRadius: BorderRadius.circular(28),
-                  ),
+        return Card(
+          color: Colors.transparent,
+          elevation: 20,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            key: _trackKey,
+            height: _sliderHeight,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(32),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.15),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
                 ),
-
-                // ── Left Label (Reject) ────────────────────────────────────────
-                Positioned(
-                  left: 20,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 150),
-                    opacity: _alignmentX <= 0
-                        ? (1.0 - _alignmentX.abs() * 0.6).clamp(0.3, 1.0)
-                        : 0.3,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.close_rounded,
-                          size: 20,
-                          color: Colors.red.shade600,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Reject',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.red.shade600,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // ── Right Label (Approve) ──────────────────────────────────────
-                Positioned(
-                  right: 20,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 150),
-                    opacity: _alignmentX >= 0
-                        ? (1.0 - _alignmentX.abs() * 0.6).clamp(0.3, 1.0)
-                        : 0.3,
-                    child: Row(
-                      children: [
-                        Text(
-                          'Approve',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.green.shade700,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Icon(
-                          Icons.check_rounded,
-                          size: 20,
-                          color: Colors.green.shade700,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // ── Center Hint Text ────────────────────────────────────────────
-                AnimatedOpacity(
-                  duration: const Duration(milliseconds: 200),
-                  opacity: _alignmentX.abs() < 0.3 ? 0.6 : 0.0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade200.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      '⇄  Slide to act  ⇄',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade700,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // ── Loading State ───────────────────────────────────────────────
-                if (isLoading)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          color: Colors.black87,
-                          strokeWidth: 2.5,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Text(
-                        _holdSide == 1 ? 'Approving…' : 'Rejecting…',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.black54,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                // ── Draggable Handle ────────────────────────────────────────────
-                if (!isLoading)
-                  AnimatedAlign(
-                    duration: _isDragging
-                        ? Duration.zero
-                        : const Duration(milliseconds: 250),
-                    curve: Curves.easeOutCubic,
-                    alignment: Alignment(_alignmentX, 0.0),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                      child: SizedBox(
-                        width: _handleSize + 12,
-                        height: _handleSize + 12,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // ── Hold Progress Ring ──────────────────────────────
-                            if (_holding)
-                              AnimatedBuilder(
-                                animation: _holdCtrl,
-                                builder: (_, _) => SizedBox(
-                                  width: _handleSize + 12,
-                                  height: _handleSize + 12,
-                                  child: CircularProgressIndicator(
-                                    value: _holdCtrl.value,
-                                    strokeWidth: 3.5,
-                                    backgroundColor: Colors.black.withOpacity(
-                                      0.06,
-                                    ),
-                                    valueColor: AlwaysStoppedAnimation(
-                                      _holdSide == 1
-                                          ? Colors.green.shade600
-                                          : Colors.red.shade600,
-                                    ),
-                                  ),
-                                ),
-                              ),
-
-                            // ── Handle Button ────────────────────────────────────
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              width: _handleSize,
-                              height: _handleSize,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: _alignmentX == 0
-                                      ? [
-                                          const Color(0xFF2C2C2C),
-                                          const Color(0xFF1A1A1A),
-                                        ]
-                                      : _alignmentX > 0
-                                      ? [
-                                          Colors.green.shade500,
-                                          Colors.green.shade700,
-                                        ]
-                                      : [
-                                          Colors.red.shade500,
-                                          Colors.red.shade700,
-                                        ],
-                                ),
-                                borderRadius: BorderRadius.circular(18),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: _alignmentX == 0
-                                        ? Colors.black.withOpacity(0.25)
-                                        : _alignmentX > 0
-                                        ? Colors.green.withOpacity(0.3)
-                                        : Colors.red.withOpacity(0.3),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 200),
-                                child: Icon(
-                                  _alignmentX == 0
-                                      ? Icons.swap_horiz_rounded
-                                      : _alignmentX > 0
-                                      ? Icons.check_circle_rounded
-                                      : Icons.cancel_rounded,
-                                  key: ValueKey<int>(
-                                    (_alignmentX * 10).round(),
-                                  ),
-                                  color: Colors.white,
-                                  size: 28,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
               ],
+            ),
+            child: Listener(
+              onPointerDown: (e) => _onPointerDown(e, isLoading),
+              onPointerMove: (e) => _onPointerMove(e, isLoading),
+              onPointerUp: (_) => _handleRelease(isLoading),
+              onPointerCancel: (_) => _handleRelease(isLoading),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    height: _sliderHeight - 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                  ),
+
+                  Positioned(
+                    left: 20,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 150),
+                      opacity: _alignmentX <= 0
+                          ? (1.0 - _alignmentX.abs() * 0.6).clamp(0.3, 1.0)
+                          : 0.3,
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 6),
+                          Text(
+                            'Reject',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red.shade600,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  Positioned(
+                    right: 20,
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 150),
+                      opacity: _alignmentX >= 0
+                          ? (1.0 - _alignmentX.abs() * 0.6).clamp(0.3, 1.0)
+                          : 0.3,
+                      child: Row(
+                        children: [
+                          Text(
+                            'Approve',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green.shade700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  AnimatedOpacity(
+                    duration: const Duration(milliseconds: 200),
+                    opacity: _alignmentX.abs() < 0.3 ? 0.6 : 0.0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '⇄  Slide to act  ⇄',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.grey.shade700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  if (isLoading)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            color: Colors.black87,
+                            strokeWidth: 2.5,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          _holdSide == 1 ? 'Approving…' : 'Rejecting…',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                  if (!isLoading)
+                    AnimatedAlign(
+                      duration: _isDragging
+                          ? Duration.zero
+                          : const Duration(milliseconds: 250),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment(_alignmentX, 0.0),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        child: SizedBox(
+                          width: _handleSize + 12,
+                          height: _handleSize + 12,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              if (_holding)
+                                AnimatedBuilder(
+                                  animation: _holdCtrl,
+                                  builder: (_, _) => SizedBox(
+                                    width: _handleSize + 12,
+                                    height: _handleSize + 12,
+                                    child: CircularProgressIndicator(
+                                      value: _holdCtrl.value,
+                                      strokeWidth: 3.5,
+                                      backgroundColor: Colors.black.withOpacity(
+                                        0.06,
+                                      ),
+                                      valueColor: AlwaysStoppedAnimation(
+                                        _holdSide == 1
+                                            ? Colors.green.shade600
+                                            : Colors.red.shade600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                width: _handleSize,
+                                height: _handleSize,
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: _alignmentX == 0
+                                        ? [
+                                            const Color(0xFF2C2C2C),
+                                            const Color(0xFF1A1A1A),
+                                          ]
+                                        : _alignmentX > 0
+                                        ? [
+                                            Colors.green.shade500,
+                                            Colors.green.shade700,
+                                          ]
+                                        : [
+                                            Colors.red.shade500,
+                                            Colors.red.shade700,
+                                          ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(18),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: _alignmentX == 0
+                                          ? Colors.black.withOpacity(0.25)
+                                          : _alignmentX > 0
+                                          ? Colors.green.withOpacity(0.3)
+                                          : Colors.red.withOpacity(0.3),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 200),
+                                  child: Icon(
+                                    _alignmentX == 0
+                                        ? Icons.swap_horiz_rounded
+                                        : _alignmentX > 0
+                                        ? Icons.check_circle_rounded
+                                        : Icons.cancel_rounded,
+                                    key: ValueKey<int>(
+                                      (_alignmentX * 10).round(),
+                                    ),
+                                    color: Colors.white,
+                                    size: 28,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         );
@@ -1609,11 +1635,16 @@ class _ErrorView extends StatelessWidget {
 //     showModalBottomSheet(
 //       context: context,
 //       backgroundColor: Colors.transparent,
-//       isDismissible: true,
+//       isDismissible: false,
 //       builder: (_) => _ApprovalResultSheet(
 //         success: success,
 //         message: message,
 //         isApprove: isApprove,
+//         onDone: () {
+//           // ✅ Close bottom sheet and pop detail page with refresh flag
+//           Navigator.pop(context); // Close bottom sheet
+//           Navigator.pop(context, true); // Pop detail page with refresh flag
+//         },
 //       ),
 //     );
 //   }
@@ -1740,12 +1771,7 @@ class _ErrorView extends StatelessWidget {
 //     return Stack(
 //       children: [
 //         ListView(
-//           padding: const EdgeInsets.fromLTRB(
-//             24,
-//             0,
-//             24,
-//             120,
-//           ), // ✅ Extra bottom padding for floating slider
+//           padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
 //           children: [
 //             // ── Order Image ──────────────────────────────────────────────────────
 //             if (order.base64File != null && order.base64File!.isNotEmpty)
@@ -1903,7 +1929,7 @@ class _ErrorView extends StatelessWidget {
 //           ],
 //         ),
 
-//         // ✅ Floating Approval Slider at Bottom
+//         // ── Floating Approval Slider ──────────────────────────────────────────
 //         Positioned(
 //           left: 16,
 //           right: 16,
@@ -1925,7 +1951,7 @@ class _ErrorView extends StatelessWidget {
 // }
 
 // // ═══════════════════════════════════════════════════════════════════════════════
-// // APPROVAL SLIDER — Redesigned with better UI/UX
+// // APPROVAL SLIDER
 // // ═══════════════════════════════════════════════════════════════════════════════
 
 // class _ApprovalSlider extends StatefulWidget {
@@ -1952,6 +1978,7 @@ class _ErrorView extends StatelessWidget {
 //   static const double _threshold = 0.80;
 //   static const double _sliderHeight = 64.0;
 //   static const double _handleSize = 52.0;
+
 //   static bool lastActionWasApprove = true;
 
 //   late final AnimationController _holdCtrl = AnimationController(
@@ -2061,237 +2088,245 @@ class _ErrorView extends StatelessWidget {
 //       builder: (context, state) {
 //         final isLoading = state is OrderApprovalLoading;
 
-//         return Card(
-//           elevation: 50,
-//           color: Colors.transparent,
-//           child: Container(
-//             key: _trackKey,
-//             height: _sliderHeight,
-//             decoration: BoxDecoration(
-//               color: Colors.grey.shade50,
-//               borderRadius: BorderRadius.circular(32),
-//               boxShadow: [
-//                 BoxShadow(
-//                   color: Colors.black.withValues(alpha: 0.25),
-//                   blurRadius: 20,
-//                   offset: const Offset(0, 8),
+//         return Container(
+//           key: _trackKey,
+//           height: _sliderHeight,
+//           decoration: BoxDecoration(
+//             color: Colors.white,
+//             borderRadius: BorderRadius.circular(32),
+//             boxShadow: [
+//               BoxShadow(
+//                 color: Colors.black.withOpacity(0.15),
+//                 blurRadius: 20,
+//                 offset: const Offset(0, 8),
+//               ),
+//             ],
+//           ),
+//           child: Listener(
+//             onPointerDown: (e) => _onPointerDown(e, isLoading),
+//             onPointerMove: (e) => _onPointerMove(e, isLoading),
+//             onPointerUp: (_) => _handleRelease(isLoading),
+//             onPointerCancel: (_) => _handleRelease(isLoading),
+//             child: Stack(
+//               alignment: Alignment.center,
+//               children: [
+//                 // ── Background Track ────────────────────────────────────────────
+//                 Container(
+//                   height: _sliderHeight - 8,
+//                   margin: const EdgeInsets.symmetric(horizontal: 4),
+//                   decoration: BoxDecoration(
+//                     color: Colors.grey.shade50,
+//                     borderRadius: BorderRadius.circular(28),
+//                   ),
 //                 ),
-//               ],
-//             ),
-//             child: Listener(
-//               onPointerDown: (e) => _onPointerDown(e, isLoading),
-//               onPointerMove: (e) => _onPointerMove(e, isLoading),
-//               onPointerUp: (_) => _handleRelease(isLoading),
-//               onPointerCancel: (_) => _handleRelease(isLoading),
-//               child: Stack(
-//                 alignment: Alignment.center,
-//                 children: [
-//                   // ── Background Track ────────────────────────────────────────────
-//                   Container(
-//                     height: _sliderHeight - 8,
-//                     margin: const EdgeInsets.symmetric(horizontal: 4),
-//                     decoration: BoxDecoration(
-//                       color: Colors.grey.shade50,
-//                       borderRadius: BorderRadius.circular(28),
-//                     ),
-//                   ),
 
-//                   // ── Left Label (Cancel) ────────────────────────────────────────
-//                   Positioned(
-//                     left: 20,
-//                     child: AnimatedOpacity(
-//                       duration: const Duration(milliseconds: 150),
-//                       opacity: _alignmentX <= 0
-//                           ? (1.0 - _alignmentX.abs() * 0.6).clamp(0.3, 1.0)
-//                           : 0.3,
-//                       child: Row(
-//                         children: [
-//                           Text(
-//                             'Reject',
-//                             style: TextStyle(
-//                               fontSize: 15,
-//                               fontWeight: FontWeight.w600,
-//                               color: Colors.red.shade600,
-//                               letterSpacing: 0.3,
-//                             ),
-//                           ),
-//                         ],
-//                       ),
-//                     ),
-//                   ),
-
-//                   // ── Right Label (Approve) ──────────────────────────────────────
-//                   Positioned(
-//                     right: 20,
-//                     child: AnimatedOpacity(
-//                       duration: const Duration(milliseconds: 150),
-//                       opacity: _alignmentX >= 0
-//                           ? (1.0 - _alignmentX.abs() * 0.6).clamp(0.3, 1.0)
-//                           : 0.3,
-//                       child: Row(
-//                         children: [
-//                           Text(
-//                             'Approve',
-//                             style: TextStyle(
-//                               fontSize: 15,
-//                               fontWeight: FontWeight.w600,
-//                               color: Colors.green.shade700,
-//                               letterSpacing: 0.3,
-//                             ),
-//                           ),
-//                         ],
-//                       ),
-//                     ),
-//                   ),
-
-//                   // ── Center Hint Text ────────────────────────────────────────────
-//                   AnimatedOpacity(
-//                     duration: const Duration(milliseconds: 200),
-//                     opacity: _alignmentX.abs() < 0.3 ? 0.6 : 0.0,
-//                     child: Container(
-//                       padding: const EdgeInsets.symmetric(
-//                         horizontal: 16,
-//                         vertical: 6,
-//                       ),
-//                       decoration: BoxDecoration(
-//                         color: Colors.grey.shade200.withOpacity(0.5),
-//                         borderRadius: BorderRadius.circular(20),
-//                       ),
-//                       child: Text(
-//                         '⇄  Slide to act  ⇄',
-//                         style: TextStyle(
-//                           fontSize: 12,
-//                           fontWeight: FontWeight.w500,
-//                           color: Colors.grey.shade700,
-//                           letterSpacing: 0.5,
-//                         ),
-//                       ),
-//                     ),
-//                   ),
-
-//                   // ── Loading State ───────────────────────────────────────────────
-//                   if (isLoading)
-//                     Row(
-//                       mainAxisSize: MainAxisSize.min,
+//                 // ── Left Label (Reject) ────────────────────────────────────────
+//                 Positioned(
+//                   left: 20,
+//                   child: AnimatedOpacity(
+//                     duration: const Duration(milliseconds: 150),
+//                     opacity: _alignmentX <= 0
+//                         ? (1.0 - _alignmentX.abs() * 0.6).clamp(0.3, 1.0)
+//                         : 0.3,
+//                     child: Row(
 //                       children: [
-//                         const SizedBox(
-//                           width: 22,
-//                           height: 22,
-//                           child: CircularProgressIndicator(
-//                             color: Colors.black87,
-//                             strokeWidth: 2.5,
-//                           ),
+//                         Icon(
+//                           Icons.close_rounded,
+//                           size: 20,
+//                           color: Colors.red.shade600,
 //                         ),
-//                         const SizedBox(width: 12),
+//                         const SizedBox(width: 6),
 //                         Text(
-//                           _holdSide == 1 ? 'Approving…' : 'Rejecting…',
-//                           style: const TextStyle(
-//                             fontSize: 14,
+//                           'Reject',
+//                           style: TextStyle(
+//                             fontSize: 15,
 //                             fontWeight: FontWeight.w600,
-//                             color: Colors.black54,
+//                             color: Colors.red.shade600,
+//                             letterSpacing: 0.3,
 //                           ),
 //                         ),
 //                       ],
 //                     ),
+//                   ),
+//                 ),
 
-//                   // ── Draggable Handle ────────────────────────────────────────────
-//                   if (!isLoading)
-//                     AnimatedAlign(
-//                       duration: _isDragging
-//                           ? Duration.zero
-//                           : const Duration(milliseconds: 250),
-//                       curve: Curves.easeOutCubic,
-//                       alignment: Alignment(_alignmentX, 0.0),
-//                       child: Padding(
-//                         padding: const EdgeInsets.symmetric(horizontal: 4.0),
-//                         child: SizedBox(
-//                           width: _handleSize + 12,
-//                           height: _handleSize + 12,
-//                           child: Stack(
-//                             alignment: Alignment.center,
-//                             children: [
-//                               // ── Hold Progress Ring ──────────────────────────────
-//                               if (_holding)
-//                                 AnimatedBuilder(
-//                                   animation: _holdCtrl,
-//                                   builder: (_, _) => SizedBox(
-//                                     width: _handleSize + 12,
-//                                     height: _handleSize + 12,
-//                                     child: CircularProgressIndicator(
-//                                       value: _holdCtrl.value,
-//                                       strokeWidth: 3.5,
-//                                       backgroundColor: Colors.black.withOpacity(
-//                                         0.06,
-//                                       ),
-//                                       valueColor: AlwaysStoppedAnimation(
-//                                         _holdSide == 1
-//                                             ? Colors.green.shade600
-//                                             : Colors.red.shade600,
-//                                       ),
-//                                     ),
-//                                   ),
-//                                 ),
+//                 // ── Right Label (Approve) ──────────────────────────────────────
+//                 Positioned(
+//                   right: 20,
+//                   child: AnimatedOpacity(
+//                     duration: const Duration(milliseconds: 150),
+//                     opacity: _alignmentX >= 0
+//                         ? (1.0 - _alignmentX.abs() * 0.6).clamp(0.3, 1.0)
+//                         : 0.3,
+//                     child: Row(
+//                       children: [
+//                         Text(
+//                           'Approve',
+//                           style: TextStyle(
+//                             fontSize: 15,
+//                             fontWeight: FontWeight.w600,
+//                             color: Colors.green.shade700,
+//                             letterSpacing: 0.3,
+//                           ),
+//                         ),
+//                         const SizedBox(width: 6),
+//                         Icon(
+//                           Icons.check_rounded,
+//                           size: 20,
+//                           color: Colors.green.shade700,
+//                         ),
+//                       ],
+//                     ),
+//                   ),
+//                 ),
 
-//                               // ── Handle Button ────────────────────────────────────
-//                               AnimatedContainer(
-//                                 duration: const Duration(milliseconds: 150),
-//                                 width: _handleSize,
-//                                 height: _handleSize,
-//                                 decoration: BoxDecoration(
-//                                   gradient: LinearGradient(
-//                                     begin: Alignment.topLeft,
-//                                     end: Alignment.bottomRight,
-//                                     colors: _alignmentX == 0
-//                                         ? [
-//                                             const Color(0xFF2C2C2C),
-//                                             const Color(0xFF1A1A1A),
-//                                           ]
-//                                         : _alignmentX > 0
-//                                         ? [
-//                                             Colors.green.shade500,
-//                                             Colors.green.shade700,
-//                                           ]
-//                                         : [
-//                                             Colors.red.shade500,
-//                                             Colors.red.shade700,
-//                                           ],
-//                                   ),
-//                                   borderRadius: BorderRadius.circular(18),
-//                                   boxShadow: [
-//                                     BoxShadow(
-//                                       color: _alignmentX == 0
-//                                           ? Colors.black.withOpacity(0.25)
-//                                           : _alignmentX > 0
-//                                           ? Colors.green.withOpacity(0.3)
-//                                           : Colors.red.withOpacity(0.3),
-//                                       blurRadius: 12,
-//                                       offset: const Offset(0, 4),
+//                 // ── Center Hint Text ────────────────────────────────────────────
+//                 AnimatedOpacity(
+//                   duration: const Duration(milliseconds: 200),
+//                   opacity: _alignmentX.abs() < 0.3 ? 0.6 : 0.0,
+//                   child: Container(
+//                     padding: const EdgeInsets.symmetric(
+//                       horizontal: 16,
+//                       vertical: 6,
+//                     ),
+//                     decoration: BoxDecoration(
+//                       color: Colors.grey.shade200.withOpacity(0.5),
+//                       borderRadius: BorderRadius.circular(20),
+//                     ),
+//                     child: Text(
+//                       '⇄  Slide to act  ⇄',
+//                       style: TextStyle(
+//                         fontSize: 12,
+//                         fontWeight: FontWeight.w500,
+//                         color: Colors.grey.shade700,
+//                         letterSpacing: 0.5,
+//                       ),
+//                     ),
+//                   ),
+//                 ),
+
+//                 // ── Loading State ───────────────────────────────────────────────
+//                 if (isLoading)
+//                   Row(
+//                     mainAxisSize: MainAxisSize.min,
+//                     children: [
+//                       const SizedBox(
+//                         width: 22,
+//                         height: 22,
+//                         child: CircularProgressIndicator(
+//                           color: Colors.black87,
+//                           strokeWidth: 2.5,
+//                         ),
+//                       ),
+//                       const SizedBox(width: 12),
+//                       Text(
+//                         _holdSide == 1 ? 'Approving…' : 'Rejecting…',
+//                         style: const TextStyle(
+//                           fontSize: 14,
+//                           fontWeight: FontWeight.w600,
+//                           color: Colors.black54,
+//                         ),
+//                       ),
+//                     ],
+//                   ),
+
+//                 // ── Draggable Handle ────────────────────────────────────────────
+//                 if (!isLoading)
+//                   AnimatedAlign(
+//                     duration: _isDragging
+//                         ? Duration.zero
+//                         : const Duration(milliseconds: 250),
+//                     curve: Curves.easeOutCubic,
+//                     alignment: Alignment(_alignmentX, 0.0),
+//                     child: Padding(
+//                       padding: const EdgeInsets.symmetric(horizontal: 4.0),
+//                       child: SizedBox(
+//                         width: _handleSize + 12,
+//                         height: _handleSize + 12,
+//                         child: Stack(
+//                           alignment: Alignment.center,
+//                           children: [
+//                             // ── Hold Progress Ring ──────────────────────────────
+//                             if (_holding)
+//                               AnimatedBuilder(
+//                                 animation: _holdCtrl,
+//                                 builder: (_, _) => SizedBox(
+//                                   width: _handleSize + 12,
+//                                   height: _handleSize + 12,
+//                                   child: CircularProgressIndicator(
+//                                     value: _holdCtrl.value,
+//                                     strokeWidth: 3.5,
+//                                     backgroundColor: Colors.black.withOpacity(
+//                                       0.06,
 //                                     ),
-//                                   ],
-//                                 ),
-//                                 child: AnimatedSwitcher(
-//                                   duration: const Duration(milliseconds: 200),
-//                                   child: Icon(
-//                                     _alignmentX == 0
-//                                         ? Icons.swap_horiz_rounded
-//                                         : _alignmentX > 0
-//                                         ? Icons.check_circle_rounded
-//                                         : Icons.cancel_rounded,
-//                                     key: ValueKey<int>(
-//                                       (_alignmentX * 10).round(),
+//                                     valueColor: AlwaysStoppedAnimation(
+//                                       _holdSide == 1
+//                                           ? Colors.green.shade600
+//                                           : Colors.red.shade600,
 //                                     ),
-//                                     color: Colors.white,
-//                                     size: 28,
 //                                   ),
 //                                 ),
 //                               ),
-//                             ],
-//                           ),
+
+//                             // ── Handle Button ────────────────────────────────────
+//                             AnimatedContainer(
+//                               duration: const Duration(milliseconds: 150),
+//                               width: _handleSize,
+//                               height: _handleSize,
+//                               decoration: BoxDecoration(
+//                                 gradient: LinearGradient(
+//                                   begin: Alignment.topLeft,
+//                                   end: Alignment.bottomRight,
+//                                   colors: _alignmentX == 0
+//                                       ? [
+//                                           const Color(0xFF2C2C2C),
+//                                           const Color(0xFF1A1A1A),
+//                                         ]
+//                                       : _alignmentX > 0
+//                                       ? [
+//                                           Colors.green.shade500,
+//                                           Colors.green.shade700,
+//                                         ]
+//                                       : [
+//                                           Colors.red.shade500,
+//                                           Colors.red.shade700,
+//                                         ],
+//                                 ),
+//                                 borderRadius: BorderRadius.circular(18),
+//                                 boxShadow: [
+//                                   BoxShadow(
+//                                     color: _alignmentX == 0
+//                                         ? Colors.black.withOpacity(0.25)
+//                                         : _alignmentX > 0
+//                                         ? Colors.green.withOpacity(0.3)
+//                                         : Colors.red.withOpacity(0.3),
+//                                     blurRadius: 12,
+//                                     offset: const Offset(0, 4),
+//                                   ),
+//                                 ],
+//                               ),
+//                               child: AnimatedSwitcher(
+//                                 duration: const Duration(milliseconds: 200),
+//                                 child: Icon(
+//                                   _alignmentX == 0
+//                                       ? Icons.swap_horiz_rounded
+//                                       : _alignmentX > 0
+//                                       ? Icons.check_circle_rounded
+//                                       : Icons.cancel_rounded,
+//                                   key: ValueKey<int>(
+//                                     (_alignmentX * 10).round(),
+//                                   ),
+//                                   color: Colors.white,
+//                                   size: 28,
+//                                 ),
+//                               ),
+//                             ),
+//                           ],
 //                         ),
 //                       ),
 //                     ),
-//                 ],
-//               ),
+//                   ),
+//               ],
 //             ),
 //           ),
 //         );
@@ -2308,11 +2343,13 @@ class _ErrorView extends StatelessWidget {
 //   final bool success;
 //   final String message;
 //   final bool isApprove;
+//   final VoidCallback onDone;
 
 //   const _ApprovalResultSheet({
 //     required this.success,
 //     required this.message,
 //     required this.isApprove,
+//     required this.onDone,
 //   });
 
 //   @override
@@ -2393,7 +2430,7 @@ class _ErrorView extends StatelessWidget {
 //           ),
 //           const SizedBox(height: 24),
 //           GestureDetector(
-//             onTap: () => Navigator.pop(context),
+//             onTap: onDone,
 //             child: Container(
 //               width: double.infinity,
 //               height: 48,

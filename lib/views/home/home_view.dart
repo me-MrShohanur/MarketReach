@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:marketing/bloc/chalan-deleiver/repository/get_chalan_repo.dart';
+import 'package:marketing/bloc/customer/customer_provider.dart';
 import 'package:marketing/bloc/order/pending_order_block.dart';
 import 'package:marketing/constants/routes.dart';
 import 'package:marketing/services/auth_service.dart';
+import 'package:marketing/services/models/customer.dart';
 import 'package:marketing/services/provider/current_user.dart';
 import 'package:marketing/views/home/subpages/delivery/bill_view.dart';
 import 'package:marketing/views/home/subpages/delivery/delivered_view.dart';
@@ -140,7 +142,6 @@ class _HomeViewState extends State<HomeView> {
   }
 
   void _onScroll() {
-    // ✅ Track pull distance for custom refresh
     final offset = _scrollController.position.pixels;
     if (offset < 0) {
       setState(() {
@@ -160,12 +161,11 @@ class _HomeViewState extends State<HomeView> {
 
   String get _greeting {
     final h = DateTime.now().hour;
-    if (h < 12) return 'Good Morning 🌅';
-    if (h < 17) return 'Good Afternoon ☀️';
-    return 'Good Evening 🌙';
+    if (h < 12) return 'Good Morning';
+    if (h < 17) return 'Good Afternoon';
+    return 'Good Evening';
   }
 
-  // ✅ Refresh the whole page
   Future<void> _refresh() async {
     if (_isRefreshing) return;
 
@@ -174,7 +174,6 @@ class _HomeViewState extends State<HomeView> {
       final now = DateTime.now();
       final from = now.subtract(const Duration(days: 30));
 
-      // Refresh orders
       _bloc.add(
         LoadOrderList(
           fromDate: _fmt(from),
@@ -183,10 +182,7 @@ class _HomeViewState extends State<HomeView> {
         ),
       );
 
-      // Refresh challan counts
       await _loadChallanCounts();
-
-      // Haptic feedback
       await HapticFeedback.lightImpact();
     } catch (e) {
       debugPrint('Refresh error: $e');
@@ -194,7 +190,6 @@ class _HomeViewState extends State<HomeView> {
     } finally {
       if (mounted) {
         setState(() => _isRefreshing = false);
-        // Animate back to top
         _scrollController.animateTo(
           0,
           duration: const Duration(milliseconds: 300),
@@ -327,8 +322,11 @@ class _HomeViewState extends State<HomeView> {
   Widget build(BuildContext context) {
     _R.init(context);
 
-    return BlocProvider.value(
-      value: _bloc,
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider.value(value: _bloc),
+        BlocProvider(create: (context) => CustomerBloc()..add(LoadCustomers())),
+      ],
       child: AnnotatedRegion<SystemUiOverlayStyle>(
         value: SystemUiOverlayStyle.dark,
         child: Scaffold(
@@ -353,7 +351,6 @@ class _HomeViewState extends State<HomeView> {
                     .where((o) => o.status == 5)
                     .length;
 
-                // ✅ Using RefreshIndicator for reliable pull-to-refresh
                 return RefreshIndicator(
                   onRefresh: _refresh,
                   color: Colors.black,
@@ -365,7 +362,6 @@ class _HomeViewState extends State<HomeView> {
                     controller: _scrollController,
                     physics: const AlwaysScrollableScrollPhysics(),
                     slivers: [
-                      // ✅ Beautiful refresh header that shows during pull
                       SliverToBoxAdapter(
                         child: _CustomRefreshHeader(
                           pullDistance: _pullDistance,
@@ -387,13 +383,14 @@ class _HomeViewState extends State<HomeView> {
                             children: [
                               // ── Header ─────────────────────────────────
                               _buildHeader(context),
-                              SizedBox(height: _R.dp(20)),
+
+                              SizedBox(height: _R.dp(16)),
 
                               // ── Banners ────────────────────────────────
                               if (isError || _challanError != null)
                                 _buildErrorBanner(),
                               if (_isRefreshing) _buildRefreshBanner(),
-
+                              // _buildOpeningBalance(context),
                               // ══════════════════════════════════════════
                               // ORDER SECTION
                               // ══════════════════════════════════════════
@@ -638,6 +635,50 @@ class _HomeViewState extends State<HomeView> {
     );
   }
 
+  // ✅ Simple Opening Balance
+  Widget _buildOpeningBalance(BuildContext context) {
+    return BlocBuilder<CustomerBloc, CustomerState>(
+      builder: (context, customerState) {
+        String openingBalance = '0.00';
+
+        if (customerState is CustomerLoaded) {
+          final balance = customerState.selectedCustomer?.openingBalance ?? 0.0;
+          openingBalance = balance.toStringAsFixed(2);
+        }
+
+        return Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: _R.dp(12),
+            vertical: _R.dp(8),
+          ),
+
+          // decoration: BoxDecoration(
+          //   color: Colors.white,
+          //   borderRadius: BorderRadius.circular(_R.dp(10)),
+          //   border: Border.all(color: Colors.grey.shade200, width: 1),
+          // ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Center(
+                child: Text(
+                  '৳$openingBalance',
+                  style: TextStyle(
+                    fontSize: _R.sp(14),
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   // ── Sub-builders ─────────────────────────────────────────────────────────
 
   Widget _buildHeader(BuildContext context) {
@@ -774,7 +815,7 @@ class _HomeViewState extends State<HomeView> {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CUSTOM REFRESH HEADER - Beautiful animated pull-to-refresh
+// CUSTOM REFRESH HEADER
 // ════════════════════════════════════════════════════════════════════════════
 
 class _CustomRefreshHeader extends StatelessWidget {
@@ -793,7 +834,6 @@ class _CustomRefreshHeader extends StatelessWidget {
     final progress = (pullDistance / maxPullDistance).clamp(0.0, 1.0);
     final isReady = progress >= 1.0 && !isRefreshing;
 
-    // Only show when pulling down or refreshing
     if (pullDistance <= 0 && !isRefreshing) {
       return const SizedBox.shrink();
     }
@@ -836,7 +876,6 @@ class _PullToRefreshState extends StatelessWidget {
         Stack(
           alignment: Alignment.center,
           children: [
-            // Background ring with shadow
             Container(
               width: _R.dp(46),
               height: _R.dp(46),
@@ -852,7 +891,6 @@ class _PullToRefreshState extends StatelessWidget {
                 ],
               ),
             ),
-            // Progress ring
             SizedBox(
               width: _R.dp(40),
               height: _R.dp(40),
@@ -865,7 +903,6 @@ class _PullToRefreshState extends StatelessWidget {
                 ),
               ),
             ),
-            // Center icon
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
               child: Icon(
@@ -909,7 +946,6 @@ class _RefreshingState extends StatelessWidget {
         Stack(
           alignment: Alignment.center,
           children: [
-            // Background ring with shadow
             Container(
               width: _R.dp(46),
               height: _R.dp(46),
@@ -925,7 +961,6 @@ class _RefreshingState extends StatelessWidget {
                 ],
               ),
             ),
-            // Spinning loader
             SizedBox(
               width: _R.dp(40),
               height: _R.dp(40),
@@ -934,7 +969,6 @@ class _RefreshingState extends StatelessWidget {
                 valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
               ),
             ),
-            // Rotating refresh icon
             TweenAnimationBuilder(
               tween: Tween<double>(begin: 0, end: 1),
               duration: const Duration(milliseconds: 800),
@@ -1409,18 +1443,12 @@ class _HomeShimmerState extends State<_HomeShimmer>
 
 // // ════════════════════════════════════════════════════════════════════════════
 // // RESPONSIVE HELPER  (_R)
-// //
-// // Call _R.init(context) once at the top of build().
-// // Then use _R.dp() for all dimensions and _R.sp() for all font sizes.
-// //
-// // Scale factor is based on 390px design width (iPhone 14 / Pixel 7 baseline)
-// // and is clamped so the UI never looks wild on 320px or 480px+ devices.
 // // ════════════════════════════════════════════════════════════════════════════
 
 // class _R {
 //   static const double _baseWidth = 390.0;
-//   static const double _minScale = 0.78; // 320px wide phone
-//   static const double _maxScale = 1.22; // large Android / tablet-ish
+//   static const double _minScale = 0.78;
+//   static const double _maxScale = 1.22;
 
 //   static late double _scale;
 //   static late double screenWidth;
@@ -1433,13 +1461,8 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //     _scale = (screenWidth / _baseWidth).clamp(_minScale, _maxScale);
 //   }
 
-//   /// Scaled dimension — padding, margin, icon size, border radius, widget size
 //   static double dp(double size) => size * _scale;
-
-//   /// Scaled font size
 //   static double sp(double size) => size * _scale;
-
-//   /// Horizontal page padding: 5 % of screen, clamped 16–28 px
 //   static double get hPad => (screenWidth * 0.05).clamp(16.0, 28.0);
 // }
 
@@ -1465,11 +1488,16 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //   bool _challanLoading = true;
 //   String? _challanError;
 
+//   // ✅ Refresh control
+//   final ScrollController _scrollController = ScrollController();
+//   double _pullDistance = 0.0;
+
 //   @override
 //   void initState() {
 //     super.initState();
 //     _loadInitialData();
 //     _loadChallanCounts();
+//     _scrollController.addListener(_onScroll);
 //   }
 
 //   void _loadInitialData() {
@@ -1536,7 +1564,25 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //   @override
 //   void dispose() {
 //     _bloc.close();
+//     _scrollController.removeListener(_onScroll);
+//     _scrollController.dispose();
 //     super.dispose();
+//   }
+
+//   void _onScroll() {
+//     // ✅ Track pull distance for custom refresh
+//     final offset = _scrollController.position.pixels;
+//     if (offset < 0) {
+//       setState(() {
+//         _pullDistance = offset.abs();
+//       });
+//     } else {
+//       if (_pullDistance != 0) {
+//         setState(() {
+//           _pullDistance = 0;
+//         });
+//       }
+//     }
 //   }
 
 //   String _fmt(DateTime d) =>
@@ -1549,12 +1595,16 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //     return 'Good Evening';
 //   }
 
+//   // ✅ Refresh the whole page
 //   Future<void> _refresh() async {
 //     if (_isRefreshing) return;
+
 //     setState(() => _isRefreshing = true);
 //     try {
 //       final now = DateTime.now();
 //       final from = now.subtract(const Duration(days: 30));
+
+//       // Refresh orders
 //       _bloc.add(
 //         LoadOrderList(
 //           fromDate: _fmt(from),
@@ -1562,9 +1612,25 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //           statusFilter: const [],
 //         ),
 //       );
+
+//       // Refresh challan counts
 //       await _loadChallanCounts();
+
+//       // Haptic feedback
+//       await HapticFeedback.lightImpact();
+//     } catch (e) {
+//       debugPrint('Refresh error: $e');
+//       await HapticFeedback.heavyImpact();
 //     } finally {
-//       if (mounted) setState(() => _isRefreshing = false);
+//       if (mounted) {
+//         setState(() => _isRefreshing = false);
+//         // Animate back to top
+//         _scrollController.animateTo(
+//           0,
+//           duration: const Duration(milliseconds: 300),
+//           curve: Curves.easeOut,
+//         );
+//       }
 //     }
 //   }
 
@@ -1614,16 +1680,17 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //     }
 //   }
 
-//   // ── Central navigation helper for all 4 order stat cards ──────────────────
-//   void _openOrders(
+//   // ── Navigation helpers ──────────────────────────────────────────────────
+
+//   Future<void> _openOrders(
 //     BuildContext context, {
 //     required List<int> statusFilter,
 //     required String title,
 //     required String subtitle,
 //     required Color accentColor,
 //     required List<OrderListItem> allOrders,
-//   }) {
-//     Navigator.push(
+//   }) async {
+//     final shouldRefresh = await Navigator.push(
 //       context,
 //       MaterialPageRoute(
 //         builder: (_) => PendingOrdersView(
@@ -1635,6 +1702,10 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //         ),
 //       ),
 //     );
+
+//     if (shouldRefresh == true) {
+//       _refresh();
+//     }
 //   }
 
 //   void _openPendingDelivery(BuildContext context) => Navigator.push(
@@ -1684,7 +1755,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 
 //   @override
 //   Widget build(BuildContext context) {
-//     // ── Init responsive helper ─────────────────────────────────────────────
 //     _R.init(context);
 
 //     return BlocProvider.value(
@@ -1713,214 +1783,281 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //                     .where((o) => o.status == 5)
 //                     .length;
 
+//                 // ✅ Using RefreshIndicator for reliable pull-to-refresh
 //                 return RefreshIndicator(
 //                   onRefresh: _refresh,
 //                   color: Colors.black,
 //                   backgroundColor: Colors.white,
-//                   strokeWidth: 2.5,
-//                   child: SingleChildScrollView(
-//                     physics: const ClampingScrollPhysics(),
-//                     padding: EdgeInsets.fromLTRB(
-//                       _R.hPad,
-//                       _R.dp(20),
-//                       _R.hPad,
-//                       _R.dp(20),
-//                     ),
-//                     child: Column(
-//                       crossAxisAlignment: CrossAxisAlignment.start,
-//                       children: [
-//                         // ── Header ─────────────────────────────────
-//                         _buildHeader(context),
-//                         SizedBox(height: _R.dp(20)),
-
-//                         // ── Banners ────────────────────────────────
-//                         if (isError || _challanError != null)
-//                           _buildErrorBanner(),
-//                         if (_isRefreshing) _buildRefreshBanner(),
-
-//                         // ══════════════════════════════════════════
-//                         // ORDER SECTION
-//                         // ══════════════════════════════════════════
-//                         _SectionHeader(
-//                           label: 'Order',
-//                           icon: Icons.shopping_cart_rounded,
-//                           color: const Color(0xFFFFC107),
+//                   strokeWidth: 3.0,
+//                   displacement: _R.dp(60),
+//                   edgeOffset: _R.dp(20),
+//                   child: CustomScrollView(
+//                     controller: _scrollController,
+//                     physics: const AlwaysScrollableScrollPhysics(),
+//                     slivers: [
+//                       // ✅ Beautiful refresh header that shows during pull
+//                       SliverToBoxAdapter(
+//                         child: _CustomRefreshHeader(
+//                           pullDistance: _pullDistance,
+//                           isRefreshing: _isRefreshing,
+//                           maxPullDistance: _R.dp(100),
 //                         ),
-//                         SizedBox(height: _R.dp(12)),
+//                       ),
 
-//                         IntrinsicHeight(
-//                           child: Row(
-//                             crossAxisAlignment: CrossAxisAlignment.stretch,
+//                       SliverToBoxAdapter(
+//                         child: Padding(
+//                           padding: EdgeInsets.fromLTRB(
+//                             _R.hPad,
+//                             0,
+//                             _R.hPad,
+//                             _R.dp(20),
+//                           ),
+//                           child: Column(
+//                             crossAxisAlignment: CrossAxisAlignment.start,
 //                             children: [
-//                               Expanded(
-//                                 child: _StatCard(
-//                                   value: '$pendingCount',
-//                                   label: 'Pending Confirm',
-//                                   accentColor: const Color(0xFFFFC107),
-//                                   onTap: () => _openOrders(
-//                                     context,
-//                                     statusFilter: const [-1, 0],
-//                                     title: 'Pending',
-//                                     subtitle: 'Drafted & Pending Orders',
-//                                     accentColor: const Color(0xFFFFC107),
-//                                     allOrders: orders,
-//                                   ),
+//                               // ── Header ─────────────────────────────────
+//                               _buildHeader(context),
+//                               SizedBox(height: _R.dp(20)),
+
+//                               // ── Banners ────────────────────────────────
+//                               if (isError || _challanError != null)
+//                                 _buildErrorBanner(),
+//                               if (_isRefreshing) _buildRefreshBanner(),
+
+//                               // ══════════════════════════════════════════
+//                               // ORDER SECTION
+//                               // ══════════════════════════════════════════
+//                               _SectionHeader(
+//                                 label: 'Order',
+//                                 icon: Icons.shopping_cart_rounded,
+//                                 color: const Color(0xFFFFC107),
+//                               ),
+//                               SizedBox(height: _R.dp(12)),
+
+//                               IntrinsicHeight(
+//                                 child: Row(
+//                                   crossAxisAlignment:
+//                                       CrossAxisAlignment.stretch,
+//                                   children: [
+//                                     Expanded(
+//                                       child: _StatCard(
+//                                         value: '$pendingCount',
+//                                         label: 'Pending Confirm',
+//                                         accentColor: const Color(0xFFFFC107),
+//                                         onTap: () => _openOrders(
+//                                           context,
+//                                           statusFilter: const [-1, 0],
+//                                           title: 'Pending',
+//                                           subtitle: 'Drafted & Pending Orders',
+//                                           accentColor: const Color(0xFFFFC107),
+//                                           allOrders: orders,
+//                                         ),
+//                                       ),
+//                                     ),
+//                                     SizedBox(width: _R.dp(12)),
+//                                     Expanded(
+//                                       child: _StatCard(
+//                                         value: '$verifyCount',
+//                                         label: 'To Verify',
+//                                         accentColor: const Color(0xFF9C27B0),
+//                                         onTap: () => _openOrders(
+//                                           context,
+//                                           statusFilter: const [1],
+//                                           title: 'Verify',
+//                                           subtitle: 'Orders to Verify',
+//                                           accentColor: const Color(0xFF9C27B0),
+//                                           allOrders: orders,
+//                                         ),
+//                                       ),
+//                                     ),
+//                                   ],
 //                                 ),
 //                               ),
-//                               SizedBox(width: _R.dp(12)),
-//                               Expanded(
-//                                 child: _StatCard(
-//                                   value: '$verifyCount',
-//                                   label: 'To Verify',
-//                                   accentColor: const Color(0xFF9C27B0),
-//                                   onTap: () => _openOrders(
-//                                     context,
-//                                     statusFilter: const [1],
-//                                     title: 'Verify',
-//                                     subtitle: 'Orders to Verify',
-//                                     accentColor: const Color(0xFF9C27B0),
-//                                     allOrders: orders,
-//                                   ),
+//                               SizedBox(height: _R.dp(12)),
+
+//                               IntrinsicHeight(
+//                                 child: Row(
+//                                   crossAxisAlignment:
+//                                       CrossAxisAlignment.stretch,
+//                                   children: [
+//                                     Expanded(
+//                                       child: _StatCard(
+//                                         value: '$approveCount',
+//                                         label: 'To Approve',
+//                                         accentColor: const Color(0xFF2196F3),
+//                                         onTap: () => _openOrders(
+//                                           context,
+//                                           statusFilter: const [3],
+//                                           title: 'Approve',
+//                                           subtitle: 'Orders to Approve',
+//                                           accentColor: const Color(0xFF2196F3),
+//                                           allOrders: orders,
+//                                         ),
+//                                       ),
+//                                     ),
+//                                     SizedBox(width: _R.dp(12)),
+//                                     Expanded(
+//                                       child: _StatCard(
+//                                         value: '$toDeliverCount',
+//                                         label: 'To Deliver',
+//                                         accentColor: const Color(0xFF4CAF50),
+//                                         onTap: () => _openOrders(
+//                                           context,
+//                                           statusFilter: const [5],
+//                                           title: 'Deliver',
+//                                           subtitle: 'Orders to Deliver',
+//                                           accentColor: const Color(0xFF4CAF50),
+//                                           allOrders: orders,
+//                                         ),
+//                                       ),
+//                                     ),
+//                                   ],
 //                                 ),
 //                               ),
+
+//                               SizedBox(height: _R.dp(20)),
+
+//                               // ══════════════════════════════════════════
+//                               // BILL SECTION
+//                               // ══════════════════════════════════════════
+//                               _SectionHeader(
+//                                 label: 'Bill',
+//                                 icon: Icons.receipt_long_rounded,
+//                                 color: const Color(0xFF607D8B),
+//                               ),
+//                               SizedBox(height: _R.dp(12)),
+
+//                               IntrinsicHeight(
+//                                 child: Row(
+//                                   crossAxisAlignment:
+//                                       CrossAxisAlignment.stretch,
+//                                   children: [
+//                                     Expanded(
+//                                       child: _ChallanStatCard(
+//                                         valueWidget: _challanValue(
+//                                           '$_pendingDeliveryCount',
+//                                           const Color(0xFFFF5722),
+//                                         ),
+//                                         label: 'Pending Delivery',
+//                                         accentColor: const Color(0xFFFF5722),
+//                                         onTap: () =>
+//                                             _openPendingDelivery(context),
+//                                       ),
+//                                     ),
+//                                     SizedBox(width: _R.dp(12)),
+//                                     Expanded(
+//                                       child: _ChallanStatCard(
+//                                         valueWidget: _challanValue(
+//                                           '$_deliveredCount',
+//                                           const Color(0xFF009688),
+//                                         ),
+//                                         label: 'Chalan',
+//                                         accentColor: const Color(0xFF009688),
+//                                         onTap: () => _openDelivered(context),
+//                                       ),
+//                                     ),
+//                                   ],
+//                                 ),
+//                               ),
+//                               SizedBox(height: _R.dp(12)),
+
+//                               _ChallanStatCard(
+//                                 valueWidget: _challanValue(
+//                                   '$_billCount',
+//                                   const Color(0xFF607D8B),
+//                                 ),
+//                                 label: 'Bill',
+//                                 accentColor: const Color(0xFF607D8B),
+//                                 onTap: () => _openBill(context),
+//                               ),
+
+//                               SizedBox(height: _R.dp(24)),
+
+//                               // ── Quick Actions ──────────────────────────
+//                               Text(
+//                                 'Quick Actions',
+//                                 style: TextStyle(
+//                                   fontSize: _R.sp(17),
+//                                   fontWeight: FontWeight.w700,
+//                                   letterSpacing: -0.3,
+//                                 ),
+//                               ),
+//                               SizedBox(height: _R.dp(12)),
+
+//                               IntrinsicHeight(
+//                                 child: Row(
+//                                   crossAxisAlignment:
+//                                       CrossAxisAlignment.stretch,
+//                                   children: [
+//                                     Expanded(
+//                                       child: _ActionCard(
+//                                         icon: Icons.add_shopping_cart_rounded,
+//                                         label: 'Create Order',
+//                                         onTap: () => Navigator.pushNamed(
+//                                           context,
+//                                           createOrderRoute,
+//                                         ),
+//                                       ),
+//                                     ),
+//                                     SizedBox(width: _R.dp(12)),
+//                                     Expanded(
+//                                       child: _ActionCard(
+//                                         icon: Icons.add_box_rounded,
+//                                         label: 'Add Product',
+//                                         onTap: () {},
+//                                       ),
+//                                     ),
+//                                   ],
+//                                 ),
+//                               ),
+
+//                               SizedBox(height: _R.dp(20)),
+
+//                               // ✅ Last updated timestamp
+//                               Container(
+//                                 padding: EdgeInsets.symmetric(
+//                                   vertical: _R.dp(8),
+//                                   horizontal: _R.dp(16),
+//                                 ),
+//                                 decoration: BoxDecoration(
+//                                   color: Colors.white,
+//                                   borderRadius: BorderRadius.circular(
+//                                     _R.dp(12),
+//                                   ),
+//                                   boxShadow: [
+//                                     BoxShadow(
+//                                       color: Colors.black.withOpacity(0.03),
+//                                       blurRadius: _R.dp(8),
+//                                       offset: Offset(0, _R.dp(2)),
+//                                     ),
+//                                   ],
+//                                 ),
+//                                 child: Row(
+//                                   mainAxisAlignment: MainAxisAlignment.center,
+//                                   children: [
+//                                     Icon(
+//                                       Icons.access_time_rounded,
+//                                       size: _R.dp(14),
+//                                       color: Colors.black38,
+//                                     ),
+//                                     SizedBox(width: _R.dp(6)),
+//                                     Text(
+//                                       'Updated ${DateTime.now().hour}:${DateTime.now().minute.toString().padLeft(2, '0')}',
+//                                       style: TextStyle(
+//                                         fontSize: _R.sp(11),
+//                                         color: Colors.black38,
+//                                         fontWeight: FontWeight.w500,
+//                                       ),
+//                                     ),
+//                                   ],
+//                                 ),
+//                               ),
+//                               SizedBox(height: _R.dp(10)),
 //                             ],
 //                           ),
 //                         ),
-//                         SizedBox(height: _R.dp(12)),
-
-//                         IntrinsicHeight(
-//                           child: Row(
-//                             crossAxisAlignment: CrossAxisAlignment.stretch,
-//                             children: [
-//                               Expanded(
-//                                 child: _StatCard(
-//                                   value: '$approveCount',
-//                                   label: 'To Approve',
-//                                   accentColor: const Color(0xFF2196F3),
-//                                   onTap: () => _openOrders(
-//                                     context,
-//                                     statusFilter: const [3],
-//                                     title: 'Approve',
-//                                     subtitle: 'Orders to Approve',
-//                                     accentColor: const Color(0xFF2196F3),
-//                                     allOrders: orders,
-//                                   ),
-//                                 ),
-//                               ),
-//                               SizedBox(width: _R.dp(12)),
-//                               Expanded(
-//                                 child: _StatCard(
-//                                   value: '$toDeliverCount',
-//                                   label: 'To Deliver',
-//                                   accentColor: const Color(0xFF4CAF50),
-//                                   onTap: () => _openOrders(
-//                                     context,
-//                                     statusFilter: const [5],
-//                                     title: 'Deliver',
-//                                     subtitle: 'Orders to Deliver',
-//                                     accentColor: const Color(0xFF4CAF50),
-//                                     allOrders: orders,
-//                                   ),
-//                                 ),
-//                               ),
-//                             ],
-//                           ),
-//                         ),
-
-//                         SizedBox(height: _R.dp(20)),
-
-//                         // ══════════════════════════════════════════
-//                         // BILL SECTION
-//                         // ══════════════════════════════════════════
-//                         _SectionHeader(
-//                           label: 'Bill',
-//                           icon: Icons.receipt_long_rounded,
-//                           color: const Color(0xFF607D8B),
-//                         ),
-//                         SizedBox(height: _R.dp(12)),
-
-//                         IntrinsicHeight(
-//                           child: Row(
-//                             crossAxisAlignment: CrossAxisAlignment.stretch,
-//                             children: [
-//                               Expanded(
-//                                 child: _ChallanStatCard(
-//                                   valueWidget: _challanValue(
-//                                     '$_pendingDeliveryCount',
-//                                     const Color(0xFFFF5722),
-//                                   ),
-//                                   label: 'Pending Delivery',
-//                                   accentColor: const Color(0xFFFF5722),
-//                                   onTap: () => _openPendingDelivery(context),
-//                                 ),
-//                               ),
-//                               SizedBox(width: _R.dp(12)),
-//                               Expanded(
-//                                 child: _ChallanStatCard(
-//                                   valueWidget: _challanValue(
-//                                     '$_deliveredCount',
-//                                     const Color(0xFF009688),
-//                                   ),
-//                                   label: 'Chalan',
-//                                   accentColor: const Color(0xFF009688),
-//                                   onTap: () => _openDelivered(context),
-//                                 ),
-//                               ),
-//                             ],
-//                           ),
-//                         ),
-//                         SizedBox(height: _R.dp(12)),
-
-//                         _ChallanStatCard(
-//                           valueWidget: _challanValue(
-//                             '$_billCount',
-//                             const Color(0xFF607D8B),
-//                           ),
-//                           label: 'Bill',
-//                           accentColor: const Color(0xFF607D8B),
-//                           onTap: () => _openBill(context),
-//                         ),
-
-//                         SizedBox(height: _R.dp(24)),
-
-//                         // ── Quick Actions ──────────────────────────
-//                         Text(
-//                           'Quick Actions',
-//                           style: TextStyle(
-//                             fontSize: _R.sp(17),
-//                             fontWeight: FontWeight.w700,
-//                             letterSpacing: -0.3,
-//                           ),
-//                         ),
-//                         SizedBox(height: _R.dp(12)),
-
-//                         IntrinsicHeight(
-//                           child: Row(
-//                             crossAxisAlignment: CrossAxisAlignment.stretch,
-//                             children: [
-//                               Expanded(
-//                                 child: _ActionCard(
-//                                   icon: Icons.add_shopping_cart_rounded,
-//                                   label: 'Create Order',
-//                                   onTap: () => Navigator.pushNamed(
-//                                     context,
-//                                     createOrderRoute,
-//                                   ),
-//                                 ),
-//                               ),
-//                               SizedBox(width: _R.dp(12)),
-//                               Expanded(
-//                                 child: _ActionCard(
-//                                   icon: Icons.add_box_rounded,
-//                                   label: 'Add Product',
-//                                   onTap: () {},
-//                                 ),
-//                               ),
-//                             ],
-//                           ),
-//                         ),
-//                       ],
-//                     ),
+//                       ),
+//                     ],
 //                   ),
 //                 );
 //               },
@@ -1973,7 +2110,11 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //               width: btnSize,
 //               height: btnSize,
 //               decoration: BoxDecoration(
-//                 color: Colors.black,
+//                 gradient: LinearGradient(
+//                   colors: [Colors.black, Colors.grey.shade800],
+//                   begin: Alignment.topLeft,
+//                   end: Alignment.bottomRight,
+//                 ),
 //                 borderRadius: BorderRadius.circular(btnRadius),
 //               ),
 //               child: Icon(
@@ -2029,23 +2170,230 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //     child: Container(
 //       padding: EdgeInsets.symmetric(horizontal: _R.dp(16), vertical: _R.dp(12)),
 //       decoration: BoxDecoration(
-//         color: Colors.blue.shade50,
+//         gradient: LinearGradient(
+//           colors: [Colors.blue.shade50, Colors.blue.shade100],
+//           begin: Alignment.topLeft,
+//           end: Alignment.bottomRight,
+//         ),
 //         borderRadius: BorderRadius.circular(_R.dp(12)),
-//         border: Border.all(color: Colors.blue.shade100),
+//         border: Border.all(color: Colors.blue.shade200),
 //       ),
 //       child: Row(
 //         children: [
 //           SizedBox(
 //             width: _R.dp(18),
 //             height: _R.dp(18),
-//             child: const CircularProgressIndicator(strokeWidth: 2),
+//             child: CircularProgressIndicator(
+//               strokeWidth: 2,
+//               valueColor: const AlwaysStoppedAnimation<Color>(Colors.black),
+//             ),
 //           ),
 //           SizedBox(width: _R.dp(10)),
-//           Text('Refreshing data...', style: TextStyle(fontSize: _R.sp(13))),
+//           Text(
+//             'Refreshing data...',
+//             style: TextStyle(
+//               fontSize: _R.sp(13),
+//               fontWeight: FontWeight.w500,
+//               color: Colors.black87,
+//             ),
+//           ),
 //         ],
 //       ),
 //     ),
 //   );
+// }
+
+// // ════════════════════════════════════════════════════════════════════════════
+// // CUSTOM REFRESH HEADER - Beautiful animated pull-to-refresh
+// // ════════════════════════════════════════════════════════════════════════════
+
+// class _CustomRefreshHeader extends StatelessWidget {
+//   final double pullDistance;
+//   final bool isRefreshing;
+//   final double maxPullDistance;
+
+//   const _CustomRefreshHeader({
+//     required this.pullDistance,
+//     required this.isRefreshing,
+//     required this.maxPullDistance,
+//   });
+
+//   @override
+//   Widget build(BuildContext context) {
+//     final progress = (pullDistance / maxPullDistance).clamp(0.0, 1.0);
+//     final isReady = progress >= 1.0 && !isRefreshing;
+
+//     // Only show when pulling down or refreshing
+//     if (pullDistance <= 0 && !isRefreshing) {
+//       return const SizedBox.shrink();
+//     }
+
+//     return Container(
+//       height: _R.dp(70),
+//       alignment: Alignment.center,
+//       child: AnimatedSwitcher(
+//         duration: const Duration(milliseconds: 300),
+//         child: isRefreshing
+//             ? _RefreshingState()
+//             : _PullToRefreshState(
+//                 progress: progress,
+//                 isReady: isReady,
+//                 pullDistance: pullDistance,
+//               ),
+//       ),
+//     );
+//   }
+// }
+
+// // ── Pull to Refresh State ──────────────────────────────────────────────────
+
+// class _PullToRefreshState extends StatelessWidget {
+//   final double progress;
+//   final bool isReady;
+//   final double pullDistance;
+
+//   const _PullToRefreshState({
+//     required this.progress,
+//     required this.isReady,
+//     required this.pullDistance,
+//   });
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return Column(
+//       mainAxisAlignment: MainAxisAlignment.center,
+//       children: [
+//         Stack(
+//           alignment: Alignment.center,
+//           children: [
+//             // Background ring with shadow
+//             Container(
+//               width: _R.dp(46),
+//               height: _R.dp(46),
+//               decoration: BoxDecoration(
+//                 color: Colors.white,
+//                 shape: BoxShape.circle,
+//                 boxShadow: [
+//                   BoxShadow(
+//                     color: Colors.black.withOpacity(0.06),
+//                     blurRadius: _R.dp(10),
+//                     offset: Offset(0, _R.dp(3)),
+//                   ),
+//                 ],
+//               ),
+//             ),
+//             // Progress ring
+//             SizedBox(
+//               width: _R.dp(40),
+//               height: _R.dp(40),
+//               child: CircularProgressIndicator(
+//                 value: isReady ? 1.0 : progress,
+//                 strokeWidth: 3,
+//                 backgroundColor: Colors.grey.shade200,
+//                 valueColor: AlwaysStoppedAnimation<Color>(
+//                   isReady ? Colors.green : Colors.black,
+//                 ),
+//               ),
+//             ),
+//             // Center icon
+//             AnimatedSwitcher(
+//               duration: const Duration(milliseconds: 200),
+//               child: Icon(
+//                 isReady ? Icons.check_rounded : Icons.arrow_downward_rounded,
+//                 key: ValueKey<bool>(isReady),
+//                 color: isReady ? Colors.green : Colors.black54,
+//                 size: _R.dp(16),
+//               ),
+//             ),
+//           ],
+//         ),
+//         if (pullDistance > _R.dp(30)) ...[
+//           SizedBox(height: _R.dp(6)),
+//           AnimatedOpacity(
+//             opacity: progress.clamp(0.0, 1.0),
+//             duration: const Duration(milliseconds: 200),
+//             child: Text(
+//               isReady ? 'Release to refresh ✨' : 'Pull to refresh',
+//               style: TextStyle(
+//                 fontSize: _R.sp(11),
+//                 fontWeight: FontWeight.w500,
+//                 color: isReady ? Colors.green : Colors.black54,
+//                 letterSpacing: 0.2,
+//               ),
+//             ),
+//           ),
+//         ],
+//       ],
+//     );
+//   }
+// }
+
+// // ── Refreshing State ──────────────────────────────────────────────────────
+
+// class _RefreshingState extends StatelessWidget {
+//   @override
+//   Widget build(BuildContext context) {
+//     return Column(
+//       mainAxisAlignment: MainAxisAlignment.center,
+//       children: [
+//         Stack(
+//           alignment: Alignment.center,
+//           children: [
+//             // Background ring with shadow
+//             Container(
+//               width: _R.dp(46),
+//               height: _R.dp(46),
+//               decoration: BoxDecoration(
+//                 color: Colors.white,
+//                 shape: BoxShape.circle,
+//                 boxShadow: [
+//                   BoxShadow(
+//                     color: Colors.black.withOpacity(0.06),
+//                     blurRadius: _R.dp(10),
+//                     offset: Offset(0, _R.dp(3)),
+//                   ),
+//                 ],
+//               ),
+//             ),
+//             // Spinning loader
+//             SizedBox(
+//               width: _R.dp(40),
+//               height: _R.dp(40),
+//               child: const CircularProgressIndicator(
+//                 strokeWidth: 3,
+//                 valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+//               ),
+//             ),
+//             // Rotating refresh icon
+//             TweenAnimationBuilder(
+//               tween: Tween<double>(begin: 0, end: 1),
+//               duration: const Duration(milliseconds: 800),
+//               builder: (context, value, child) {
+//                 return Transform.rotate(
+//                   angle: value * 2 * 3.14159,
+//                   child: Icon(
+//                     Icons.refresh_rounded,
+//                     color: Colors.black87,
+//                     size: _R.dp(16),
+//                   ),
+//                 );
+//               },
+//             ),
+//           ],
+//         ),
+//         SizedBox(height: _R.dp(6)),
+//         Text(
+//           'Refreshing... 🔄',
+//           style: TextStyle(
+//             fontSize: _R.sp(11),
+//             fontWeight: FontWeight.w500,
+//             color: Colors.black54,
+//             letterSpacing: 0.2,
+//           ),
+//         ),
+//       ],
+//     );
+//   }
 // }
 
 // // ════════════════════════════════════════════════════════════════════════════
@@ -2086,7 +2434,7 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //         ),
 //         SizedBox(width: _R.dp(8)),
 //         Expanded(
-//           child: Divider(color: color.withValues(alpha: 0.2), thickness: 1),
+//           child: Divider(color: color.withValues(alpha: 0.2), thickness: 1.5),
 //         ),
 //       ],
 //     );
@@ -2094,9 +2442,7 @@ class _HomeShimmerState extends State<_HomeShimmer>
 // }
 
 // // ════════════════════════════════════════════════════════════════════════════
-// // STAT CARD — order list counts
-// //   • FittedBox on value so large numbers don't overflow on small screens
-// //   • minHeight keeps both cards in a row the same height via IntrinsicHeight
+// // STAT CARD
 // // ════════════════════════════════════════════════════════════════════════════
 
 // class _StatCard extends StatelessWidget {
@@ -2141,7 +2487,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //           crossAxisAlignment: CrossAxisAlignment.start,
 //           mainAxisSize: MainAxisSize.min,
 //           children: [
-//             // FittedBox prevents the number from ever overflowing
 //             FittedBox(
 //               fit: BoxFit.scaleDown,
 //               alignment: Alignment.centerLeft,
@@ -2174,7 +2519,7 @@ class _HomeShimmerState extends State<_HomeShimmer>
 // }
 
 // // ════════════════════════════════════════════════════════════════════════════
-// // CHALLAN STAT CARD — delivery section (widget value for spinner/dash/number)
+// // CHALLAN STAT CARD
 // // ════════════════════════════════════════════════════════════════════════════
 
 // class _ChallanStatCard extends StatelessWidget {
@@ -2219,7 +2564,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //           crossAxisAlignment: CrossAxisAlignment.start,
 //           mainAxisSize: MainAxisSize.min,
 //           children: [
-//             // Fixed height slot keeps card stable during loading/error/loaded
 //             SizedBox(
 //               height: _R.dp(28),
 //               child: Align(alignment: Alignment.centerLeft, child: valueWidget),
@@ -2264,7 +2608,11 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //       child: Container(
 //         padding: EdgeInsets.symmetric(vertical: _R.dp(24)),
 //         decoration: BoxDecoration(
-//           color: Colors.black,
+//           gradient: LinearGradient(
+//             colors: [Colors.black, Colors.grey.shade900],
+//             begin: Alignment.topLeft,
+//             end: Alignment.bottomRight,
+//           ),
 //           borderRadius: BorderRadius.circular(_R.dp(16)),
 //           boxShadow: [
 //             BoxShadow(
@@ -2296,7 +2644,7 @@ class _HomeShimmerState extends State<_HomeShimmer>
 // }
 
 // // ════════════════════════════════════════════════════════════════════════════
-// // SHIMMER  (all sizes via _R so it also scales correctly)
+// // SHIMMER
 // // ════════════════════════════════════════════════════════════════════════════
 
 // class _HomeShimmer extends StatefulWidget {
