@@ -16,6 +16,7 @@ class EndPoint {
   static const String save = 'Order/Save';
   static const String saveImageForOrder = 'Order/SaveImageForOrder';
   static const String saveOrderApproval = 'Order/SaveOrderApproval';
+  static const String getOrderDetails = 'Order/GetOrderDetails';
 
   // 'Order/GetCustomer?companyId=122&type=2&empId=5892&userId=3631&customerId=0';
 }

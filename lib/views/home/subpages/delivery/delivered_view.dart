@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:marketing/bloc/chalan-deleiver/block/chalan_bloc_list.dart';
@@ -210,16 +212,19 @@ class _ChallanCard extends StatelessWidget {
 
     return InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChallanDetailsView(
-            challanId: item.challanId,
-            orderNo: item.orderNo,
-            accentColor: _kAccent,
+      onTap: () {
+        log(name: 'challanId', item.challanId.toString());
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChallanDetailsView(
+              challanId: item.challanId,
+              orderNo: item.orderNo,
+              accentColor: _kAccent,
+            ),
           ),
-        ),
-      ),
+        );
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:marketing/bloc/chalan-confirm/repo/challan_confirm.dart';
 import 'package:marketing/bloc/chalan-deleiver/update_chalan.dart';
 import 'package:marketing/bloc/chalan-details/channal_bloc.dart';
 import 'package:marketing/bloc/chalan-details/repository/chalan_details_repo.dart';
+import 'package:marketing/bloc/chalan-confirm/confirm_challan_bloc.dart';
 
 import 'package:marketing/services/models/chalan_details.dart';
 
@@ -21,10 +23,18 @@ class ChallanDetailsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocProvider(
-      create: (_) =>
-          ChallanDetailsBloc(repository: ChallanDetailsRepository())
-            ..add(FetchChallanDetails(challanId: challanId)),
+    return MultiBlocProvider(
+      providers: [
+        BlocProvider(
+          create: (_) =>
+              ChallanDetailsBloc(repository: ChallanDetailsRepository())
+                ..add(FetchChallanDetails(challanId: challanId)),
+        ),
+        BlocProvider(
+          create: (_) =>
+              ConfirmChallanBloc(repository: ConfirmChallanRepository()),
+        ),
+      ],
       child: _ChallanDetailsBody(
         challanId: challanId,
         orderNo: orderNo,
@@ -176,6 +186,165 @@ class _ChallanDetailsBody extends StatelessWidget {
               ],
             );
           },
+        ),
+      ),
+      // ── Bottom Confirm bar ──────────────────────────────────────────────
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+          child: BlocConsumer<ConfirmChallanBloc, ConfirmChallanState>(
+            listener: (context, state) {
+              if (state is ConfirmChallanSuccess) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: const [
+                        Icon(
+                          Icons.check_circle_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          'Challan confirmed as received',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                    backgroundColor: const Color(0xFF4CAF50),
+                    behavior: SnackBarBehavior.floating,
+                    margin: const EdgeInsets.all(16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                );
+                // Pop back with `true` so the calling page knows to refresh
+                // its list (e.g. remove/relabel this challan).
+                Navigator.pop(context, true);
+              } else if (state is ConfirmChallanFailure) {
+                // wasServerRejection = HTTP 200 but body was `false`
+                // (request understood, confirm just didn't go through).
+                // false = real error (bad status code / network / bad body).
+                final isRejection = state.wasServerRejection;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Row(
+                      children: [
+                        Icon(
+                          isRejection
+                              ? Icons.warning_amber_rounded
+                              : Icons.error_outline_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            state.error,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Amber for "server said no", red for "something broke".
+                    backgroundColor: isRejection
+                        ? const Color(0xFFFF9800)
+                        : Colors.redAccent,
+                    behavior: SnackBarBehavior.floating,
+                    margin: const EdgeInsets.all(16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                );
+              }
+            },
+            builder: (context, state) {
+              final isLoading = state is ConfirmChallanLoading;
+              final isDone = state is ConfirmChallanSuccess;
+              // Both failure kinds leave the button live again so the user
+              // can retry — success is the only state that locks it out.
+
+              return GestureDetector(
+                onTap: (isLoading || isDone)
+                    ? null
+                    : () => context.read<ConfirmChallanBloc>().add(
+                        ConfirmChallanRequested(challanId: challanId),
+                      ),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  width: double.infinity,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: (isLoading || isDone)
+                        ? Colors.black38
+                        : Colors.black,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: (isLoading || isDone)
+                        ? []
+                        : const [
+                            BoxShadow(
+                              color: Color(0x26000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 6),
+                            ),
+                          ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (isLoading) ...[
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'Confirming…',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ] else ...[
+                        Icon(
+                          isDone
+                              ? Icons.check_circle_rounded
+                              : Icons.check_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          isDone ? 'Confirmed' : 'Confirm',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            letterSpacing: -0.1,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         ),
       ),
     );
