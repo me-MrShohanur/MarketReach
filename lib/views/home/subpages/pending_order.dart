@@ -1,7 +1,4 @@
-// lib/views/home/subpages/pending_orders_view.dart
-
 import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -107,6 +104,25 @@ class _PendingOrdersViewState extends State<PendingOrdersView> {
     }
   }
 
+  // ✅ Method to navigate to order detail and handle refresh
+  Future<void> _navigateToOrderDetail(OrderListItem order) async {
+    final shouldRefresh = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OrderDetailView(
+          orderId: order.orderId,
+          orderNo: order.orderNo,
+          id: order.id,
+        ),
+      ),
+    );
+
+    // ✅ If the result is true (approve/cancel action was performed), refresh the list
+    if (shouldRefresh == true) {
+      _load();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return BlocProvider.value(
@@ -146,6 +162,8 @@ class _PendingOrdersViewState extends State<PendingOrdersView> {
                         return _OrderList(
                           orders: state.orders,
                           onRefresh: () async => _load(),
+                          onOrderTap:
+                              _navigateToOrderDetail, // ✅ Pass the navigation method
                         );
                       }
                       return const SizedBox.shrink();
@@ -313,8 +331,13 @@ class _Header extends StatelessWidget {
 class _OrderList extends StatelessWidget {
   final List<OrderListItem> orders;
   final Future<void> Function() onRefresh;
+  final Future<void> Function(OrderListItem) onOrderTap; // ✅ Added callback
 
-  const _OrderList({required this.orders, required this.onRefresh});
+  const _OrderList({
+    required this.orders,
+    required this.onRefresh,
+    required this.onOrderTap, // ✅ Required parameter
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -331,16 +354,7 @@ class _OrderList extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 12),
             child: _OrderCard(
               order: order,
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => OrderDetailView(
-                    orderId: order.orderId,
-                    orderNo: order.orderNo,
-                    id: order.id,
-                  ),
-                ),
-              ),
+              onTap: () => onOrderTap(order), // ✅ Use the callback
               onAttachTap: () => _OrderAttachSheet.show(context, order: order),
             ),
           );
