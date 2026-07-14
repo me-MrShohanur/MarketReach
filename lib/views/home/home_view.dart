@@ -246,7 +246,6 @@ class _HomeViewState extends State<HomeView> {
   }
 
   // ── Navigation helpers ──────────────────────────────────────────────────
-
   Future<void> _openOrders(
     BuildContext context, {
     required List<int> statusFilter,
@@ -390,7 +389,6 @@ class _HomeViewState extends State<HomeView> {
                               if (isError || _challanError != null)
                                 _buildErrorBanner(),
                               if (_isRefreshing) _buildRefreshBanner(),
-                              // _buildOpeningBalance(context),
                               // ══════════════════════════════════════════
                               // ORDER SECTION
                               // ══════════════════════════════════════════
@@ -635,50 +633,6 @@ class _HomeViewState extends State<HomeView> {
     );
   }
 
-  // ✅ Simple Opening Balance
-  Widget _buildOpeningBalance(BuildContext context) {
-    return BlocBuilder<CustomerBloc, CustomerState>(
-      builder: (context, customerState) {
-        String openingBalance = '0.00';
-
-        if (customerState is CustomerLoaded) {
-          final balance = customerState.selectedCustomer?.openingBalance ?? 0.0;
-          openingBalance = balance.toStringAsFixed(2);
-        }
-
-        return Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: _R.dp(12),
-            vertical: _R.dp(8),
-          ),
-
-          // decoration: BoxDecoration(
-          //   color: Colors.white,
-          //   borderRadius: BorderRadius.circular(_R.dp(10)),
-          //   border: Border.all(color: Colors.grey.shade200, width: 1),
-          // ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Center(
-                child: Text(
-                  '৳$openingBalance',
-                  style: TextStyle(
-                    fontSize: _R.sp(14),
-                    fontWeight: FontWeight.w700,
-                    color: Colors.black87,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   // ── Sub-builders ─────────────────────────────────────────────────────────
 
   Widget _buildHeader(BuildContext context) {
@@ -694,7 +648,37 @@ class _HomeViewState extends State<HomeView> {
               _greeting,
               style: TextStyle(fontSize: _R.sp(13), color: Colors.black45),
             ),
-            SizedBox(height: _R.dp(2)),
+            SizedBox(height: _R.dp(4)),
+            BlocBuilder<CustomerBloc, CustomerState>(
+              builder: (context, customerState) {
+                String openingBalance = '0.00';
+                if (customerState is CustomerLoaded) {
+                  final balance =
+                      customerState.selectedCustomer?.openingBalance ?? 0.0;
+                  openingBalance = balance.toStringAsFixed(2);
+                }
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.account_balance_wallet_outlined,
+                      size: _R.dp(11),
+                      color: Colors.black38,
+                    ),
+                    SizedBox(width: _R.dp(4)),
+                    Text(
+                      'Balance ৳$openingBalance',
+                      style: TextStyle(
+                        fontSize: _R.sp(11),
+                        color: Colors.black38,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ],
         ),
         Row(
@@ -1427,7 +1411,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
     ),
   );
 }
-
 // import 'package:flutter/material.dart';
 // import 'package:flutter/services.dart';
 // import 'package:flutter_bloc/flutter_bloc.dart';
