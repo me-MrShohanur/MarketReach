@@ -64,6 +64,9 @@ class _HomeViewState extends State<HomeView> {
   final ScrollController _scrollController = ScrollController();
   double _pullDistance = 0.0;
 
+  // ✅ Balance visibility toggle (like bKash)
+  bool _isBalanceVisible = false;
+
   @override
   void initState() {
     super.initState();
@@ -158,13 +161,6 @@ class _HomeViewState extends State<HomeView> {
 
   String _fmt(DateTime d) =>
       '${d.year}${d.month.toString().padLeft(2, '0')}${d.day.toString().padLeft(2, '0')}';
-
-  String get _greeting {
-    final h = DateTime.now().hour;
-    if (h < 12) return 'Good Morning';
-    if (h < 17) return 'Good Afternoon';
-    return 'Good Evening';
-  }
 
   Future<void> _refresh() async {
     if (_isRefreshing) return;
@@ -636,50 +632,143 @@ class _HomeViewState extends State<HomeView> {
   // ── Sub-builders ─────────────────────────────────────────────────────────
 
   Widget _buildHeader(BuildContext context) {
-    final btnSize = _R.dp(44);
-    final btnRadius = _R.dp(12);
+    final btnSize = _R.dp(40);
+    final btnRadius = _R.dp(10);
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _greeting,
-              style: TextStyle(fontSize: _R.sp(13), color: Colors.black45),
-            ),
-            SizedBox(height: _R.dp(4)),
-            BlocBuilder<CustomerBloc, CustomerState>(
-              builder: (context, customerState) {
-                String openingBalance = '0.00';
-                if (customerState is CustomerLoaded) {
-                  final balance =
-                      customerState.selectedCustomer?.openingBalance ?? 0.0;
-                  openingBalance = balance.toStringAsFixed(2);
-                }
-                return Row(
+        // ✅ bKash-style Balance with Toggle
+        BlocBuilder<CustomerBloc, CustomerState>(
+          builder: (context, customerState) {
+            String openingBalance = '0.00';
+            if (customerState is CustomerLoaded) {
+              final balance =
+                  customerState.selectedCustomer?.openingBalance ?? 0.0;
+              openingBalance = balance.toStringAsFixed(2);
+            }
+            return GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isBalanceVisible = !_isBalanceVisible;
+                  HapticFeedback.lightImpact();
+                });
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+                padding: EdgeInsets.symmetric(
+                  horizontal: _R.dp(12),
+                  vertical: _R.dp(8),
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(_R.dp(24)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: _R.dp(8),
+                      offset: Offset(0, _R.dp(3)),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: _isBalanceVisible
+                        ? const Color(0xFF4CAF50).withOpacity(0.3)
+                        : Colors.grey.shade100,
+                    width: 1,
+                  ),
+                ),
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
-                      Icons.account_balance_wallet_outlined,
-                      size: _R.dp(11),
-                      color: Colors.black38,
+                    // Icon
+                    Container(
+                      padding: EdgeInsets.all(_R.dp(6)),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF4CAF50).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(_R.dp(10)),
+                      ),
+                      child: Icon(
+                        _isBalanceVisible
+                            ? Icons.visibility_rounded
+                            : Icons.visibility_off_rounded,
+                        color: const Color(0xFF4CAF50),
+                        size: _R.dp(16),
+                      ),
                     ),
+                    SizedBox(width: _R.dp(8)),
+
+                    // Balance
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Balance',
+                          style: TextStyle(
+                            fontSize: _R.sp(9),
+                            color: Colors.grey.shade400,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.2,
+                            height: 1,
+                          ),
+                        ),
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          switchInCurve: Curves.easeOut,
+                          switchOutCurve: Curves.easeIn,
+                          child: _isBalanceVisible
+                              ? Text(
+                                  '৳ $openingBalance',
+                                  key: const ValueKey('visible'),
+                                  style: TextStyle(
+                                    fontSize: _R.sp(15),
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.black87,
+                                    letterSpacing: -0.2,
+                                    height: 1,
+                                  ),
+                                )
+                              : Row(
+                                  key: const ValueKey('hidden'),
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: List.generate(
+                                    4,
+                                    (index) => Container(
+                                      margin: EdgeInsets.only(
+                                        right: index < 3 ? _R.dp(3) : 0,
+                                      ),
+                                      width: _R.dp(6),
+                                      height: _R.dp(6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.grey.shade400,
+                                        borderRadius: BorderRadius.circular(
+                                          _R.dp(3),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ],
+                    ),
+
+                    // Toggle indicator
                     SizedBox(width: _R.dp(4)),
-                    Text(
-                      'Balance ৳$openingBalance',
-                      style: TextStyle(
-                        fontSize: _R.sp(11),
-                        color: Colors.black38,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: -0.1,
+                    AnimatedRotation(
+                      duration: const Duration(milliseconds: 300),
+                      turns: _isBalanceVisible ? 0.5 : 0.0,
+                      child: Icon(
+                        Icons.arrow_drop_down_rounded,
+                        color: Colors.grey.shade400,
+                        size: _R.dp(18),
                       ),
                     ),
                   ],
-                );
-              },
-            ),
-          ],
+                ),
+              ),
+            );
+          },
         ),
         Row(
           children: [
@@ -696,11 +785,11 @@ class _HomeViewState extends State<HomeView> {
                 child: Icon(
                   Icons.logout_rounded,
                   color: Colors.red.shade400,
-                  size: _R.dp(20),
+                  size: _R.dp(18),
                 ),
               ),
             ),
-            SizedBox(width: _R.dp(10)),
+            SizedBox(width: _R.dp(8)),
             Container(
               width: btnSize,
               height: btnSize,
@@ -715,7 +804,7 @@ class _HomeViewState extends State<HomeView> {
               child: Icon(
                 Icons.trending_up_rounded,
                 color: Colors.white,
-                size: _R.dp(22),
+                size: _R.dp(20),
               ),
             ),
           ],
@@ -1415,9 +1504,11 @@ class _HomeShimmerState extends State<_HomeShimmer>
 // import 'package:flutter/services.dart';
 // import 'package:flutter_bloc/flutter_bloc.dart';
 // import 'package:marketing/bloc/chalan-deleiver/repository/get_chalan_repo.dart';
+// import 'package:marketing/bloc/customer/customer_provider.dart';
 // import 'package:marketing/bloc/order/pending_order_block.dart';
 // import 'package:marketing/constants/routes.dart';
 // import 'package:marketing/services/auth_service.dart';
+// import 'package:marketing/services/models/customer.dart';
 // import 'package:marketing/services/provider/current_user.dart';
 // import 'package:marketing/views/home/subpages/delivery/bill_view.dart';
 // import 'package:marketing/views/home/subpages/delivery/delivered_view.dart';
@@ -1553,7 +1644,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //   }
 
 //   void _onScroll() {
-//     // ✅ Track pull distance for custom refresh
 //     final offset = _scrollController.position.pixels;
 //     if (offset < 0) {
 //       setState(() {
@@ -1578,7 +1668,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //     return 'Good Evening';
 //   }
 
-//   // ✅ Refresh the whole page
 //   Future<void> _refresh() async {
 //     if (_isRefreshing) return;
 
@@ -1587,7 +1676,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //       final now = DateTime.now();
 //       final from = now.subtract(const Duration(days: 30));
 
-//       // Refresh orders
 //       _bloc.add(
 //         LoadOrderList(
 //           fromDate: _fmt(from),
@@ -1596,10 +1684,7 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //         ),
 //       );
 
-//       // Refresh challan counts
 //       await _loadChallanCounts();
-
-//       // Haptic feedback
 //       await HapticFeedback.lightImpact();
 //     } catch (e) {
 //       debugPrint('Refresh error: $e');
@@ -1607,7 +1692,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //     } finally {
 //       if (mounted) {
 //         setState(() => _isRefreshing = false);
-//         // Animate back to top
 //         _scrollController.animateTo(
 //           0,
 //           duration: const Duration(milliseconds: 300),
@@ -1664,7 +1748,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //   }
 
 //   // ── Navigation helpers ──────────────────────────────────────────────────
-
 //   Future<void> _openOrders(
 //     BuildContext context, {
 //     required List<int> statusFilter,
@@ -1740,8 +1823,11 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //   Widget build(BuildContext context) {
 //     _R.init(context);
 
-//     return BlocProvider.value(
-//       value: _bloc,
+//     return MultiBlocProvider(
+//       providers: [
+//         BlocProvider.value(value: _bloc),
+//         BlocProvider(create: (context) => CustomerBloc()..add(LoadCustomers())),
+//       ],
 //       child: AnnotatedRegion<SystemUiOverlayStyle>(
 //         value: SystemUiOverlayStyle.dark,
 //         child: Scaffold(
@@ -1766,7 +1852,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //                     .where((o) => o.status == 5)
 //                     .length;
 
-//                 // ✅ Using RefreshIndicator for reliable pull-to-refresh
 //                 return RefreshIndicator(
 //                   onRefresh: _refresh,
 //                   color: Colors.black,
@@ -1778,7 +1863,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //                     controller: _scrollController,
 //                     physics: const AlwaysScrollableScrollPhysics(),
 //                     slivers: [
-//                       // ✅ Beautiful refresh header that shows during pull
 //                       SliverToBoxAdapter(
 //                         child: _CustomRefreshHeader(
 //                           pullDistance: _pullDistance,
@@ -1800,13 +1884,13 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //                             children: [
 //                               // ── Header ─────────────────────────────────
 //                               _buildHeader(context),
-//                               SizedBox(height: _R.dp(20)),
+
+//                               SizedBox(height: _R.dp(16)),
 
 //                               // ── Banners ────────────────────────────────
 //                               if (isError || _challanError != null)
 //                                 _buildErrorBanner(),
 //                               if (_isRefreshing) _buildRefreshBanner(),
-
 //                               // ══════════════════════════════════════════
 //                               // ORDER SECTION
 //                               // ══════════════════════════════════════════
@@ -2066,7 +2150,37 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //               _greeting,
 //               style: TextStyle(fontSize: _R.sp(13), color: Colors.black45),
 //             ),
-//             SizedBox(height: _R.dp(2)),
+//             SizedBox(height: _R.dp(4)),
+//             BlocBuilder<CustomerBloc, CustomerState>(
+//               builder: (context, customerState) {
+//                 String openingBalance = '0.00';
+//                 if (customerState is CustomerLoaded) {
+//                   final balance =
+//                       customerState.selectedCustomer?.openingBalance ?? 0.0;
+//                   openingBalance = balance.toStringAsFixed(2);
+//                 }
+//                 return Row(
+//                   mainAxisSize: MainAxisSize.min,
+//                   children: [
+//                     Icon(
+//                       Icons.account_balance_wallet_outlined,
+//                       size: _R.dp(11),
+//                       color: Colors.black38,
+//                     ),
+//                     SizedBox(width: _R.dp(4)),
+//                     Text(
+//                       'Balance ৳$openingBalance',
+//                       style: TextStyle(
+//                         fontSize: _R.sp(11),
+//                         color: Colors.black38,
+//                         fontWeight: FontWeight.w500,
+//                         letterSpacing: -0.1,
+//                       ),
+//                     ),
+//                   ],
+//                 );
+//               },
+//             ),
 //           ],
 //         ),
 //         Row(
@@ -2187,7 +2301,7 @@ class _HomeShimmerState extends State<_HomeShimmer>
 // }
 
 // // ════════════════════════════════════════════════════════════════════════════
-// // CUSTOM REFRESH HEADER - Beautiful animated pull-to-refresh
+// // CUSTOM REFRESH HEADER
 // // ════════════════════════════════════════════════════════════════════════════
 
 // class _CustomRefreshHeader extends StatelessWidget {
@@ -2206,7 +2320,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //     final progress = (pullDistance / maxPullDistance).clamp(0.0, 1.0);
 //     final isReady = progress >= 1.0 && !isRefreshing;
 
-//     // Only show when pulling down or refreshing
 //     if (pullDistance <= 0 && !isRefreshing) {
 //       return const SizedBox.shrink();
 //     }
@@ -2249,7 +2362,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //         Stack(
 //           alignment: Alignment.center,
 //           children: [
-//             // Background ring with shadow
 //             Container(
 //               width: _R.dp(46),
 //               height: _R.dp(46),
@@ -2265,7 +2377,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //                 ],
 //               ),
 //             ),
-//             // Progress ring
 //             SizedBox(
 //               width: _R.dp(40),
 //               height: _R.dp(40),
@@ -2278,7 +2389,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //                 ),
 //               ),
 //             ),
-//             // Center icon
 //             AnimatedSwitcher(
 //               duration: const Duration(milliseconds: 200),
 //               child: Icon(
@@ -2322,7 +2432,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //         Stack(
 //           alignment: Alignment.center,
 //           children: [
-//             // Background ring with shadow
 //             Container(
 //               width: _R.dp(46),
 //               height: _R.dp(46),
@@ -2338,7 +2447,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //                 ],
 //               ),
 //             ),
-//             // Spinning loader
 //             SizedBox(
 //               width: _R.dp(40),
 //               height: _R.dp(40),
@@ -2347,7 +2455,6 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //                 valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
 //               ),
 //             ),
-//             // Rotating refresh icon
 //             TweenAnimationBuilder(
 //               tween: Tween<double>(begin: 0, end: 1),
 //               duration: const Duration(milliseconds: 800),
@@ -2417,7 +2524,7 @@ class _HomeShimmerState extends State<_HomeShimmer>
 //         ),
 //         SizedBox(width: _R.dp(8)),
 //         Expanded(
-//           child: Divider(color: color.withValues(alpha: 0.2), thickness: 1.5),
+//           child: Divider(color: color.withValues(alpha: 0.2), thickness: 1),
 //         ),
 //       ],
 //     );
