@@ -2,11 +2,14 @@
 
 import 'dart:convert';
 import 'dart:developer';
-
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:http/http.dart' as http;
 import 'package:marketing/constants/api_values.dart';
 import 'package:marketing/services/provider/current_user.dart';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ORDER DETAIL ITEM
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class OrderDetailItem {
   final int id;
@@ -27,7 +30,6 @@ class OrderDetailItem {
   final String? remarks;
   final String? custRef;
 
-  // === NEW FIELDS (All Nullable for backward compatibility) ===
   final int? pcsQty;
   final double? discount;
   final double? factor;
@@ -36,7 +38,7 @@ class OrderDetailItem {
   final double? forfeiture;
   final int? rdId;
   final String? tQty;
-  final int? orderType; // in details
+  final int? orderType;
 
   const OrderDetailItem({
     required this.id,
@@ -56,8 +58,6 @@ class OrderDetailItem {
     required this.sizeId,
     this.remarks,
     this.custRef,
-
-    // New fields
     this.pcsQty,
     this.discount,
     this.factor,
@@ -87,8 +87,6 @@ class OrderDetailItem {
     sizeId: j['sizeId'] ?? 0,
     remarks: j['remarks'],
     custRef: j['custRef'],
-
-    // New fields parsing
     pcsQty: (j['pcsQty'] as num?)?.toInt(),
     discount: (j['discount'] as num?)?.toDouble(),
     factor: (j['factor'] as num?)?.toDouble(),
@@ -100,7 +98,10 @@ class OrderDetailItem {
     orderType: (j['orderType'] as num?)?.toInt(),
   );
 }
-// ─── Master Model ─────────────────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ORDER DETAIL MASTER
+// ═══════════════════════════════════════════════════════════════════════════════
 
 class OrderDetailMaster {
   final int id;
@@ -132,8 +133,6 @@ class OrderDetailMaster {
   final int branchId;
   final int compId;
   final List<OrderDetailItem> details;
-
-  // === NEW FIELDS (Nullable) ===
   final String? chequeDate;
   final double? creditLimit;
   final double? balance;
@@ -175,8 +174,6 @@ class OrderDetailMaster {
     required this.branchId,
     required this.compId,
     required this.details,
-
-    // New fields
     this.chequeDate,
     this.creditLimit,
     this.balance,
@@ -223,8 +220,6 @@ class OrderDetailMaster {
       details: rawDetails
           .map((e) => OrderDetailItem.fromJson(e as Map<String, dynamic>))
           .toList(),
-
-      // New fields
       chequeDate: j['chequeDate']?.toString(),
       creditLimit: (j['creditLimit'] as num?)?.toDouble(),
       balance: (j['balance'] as num?)?.toDouble(),
@@ -239,7 +234,6 @@ class OrderDetailMaster {
   }
 
   String get formattedDate {
-    // ... your existing code (unchanged)
     const months = [
       '',
       'Jan',
@@ -268,7 +262,9 @@ class OrderDetailMaster {
   }
 }
 
-// ─── Events ───────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// EVENTS
+// ═══════════════════════════════════════════════════════════════════════════════
 
 abstract class OrderDetailEvent {}
 
@@ -277,7 +273,20 @@ class LoadOrderDetail extends OrderDetailEvent {
   LoadOrderDetail(this.id);
 }
 
-// ─── States ───────────────────────────────────────────────────────────────────
+class ToggleEditMode extends OrderDetailEvent {
+  final bool isEditing;
+  ToggleEditMode(this.isEditing);
+}
+
+class UpdateOrderField extends OrderDetailEvent {
+  final String fieldKey;
+  final String value;
+  UpdateOrderField({required this.fieldKey, required this.value});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STATES
+// ═══════════════════════════════════════════════════════════════════════════════
 
 abstract class OrderDetailState {}
 
@@ -287,7 +296,14 @@ class OrderDetailLoading extends OrderDetailState {}
 
 class OrderDetailLoaded extends OrderDetailState {
   final OrderDetailMaster order;
-  OrderDetailLoaded(this.order);
+  final bool isEditing;
+  final Map<String, String> editedFields;
+
+  OrderDetailLoaded(
+    this.order, {
+    this.isEditing = false,
+    this.editedFields = const {},
+  });
 }
 
 class OrderDetailError extends OrderDetailState {
@@ -295,13 +311,18 @@ class OrderDetailError extends OrderDetailState {
   OrderDetailError(this.message);
 }
 
-// ─── BLoC ─────────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// BLoC
+// ═══════════════════════════════════════════════════════════════════════════════
+
 class OrderDetailBloc extends Bloc<OrderDetailEvent, OrderDetailState> {
   static const _base =
       '${BaseUrl.apiBase}/api/${V.v1}/${EndPoint.getOrderDetails}';
 
   OrderDetailBloc() : super(OrderDetailInitial()) {
     on<LoadOrderDetail>(_fetch);
+    on<ToggleEditMode>(_toggleEditMode);
+    on<UpdateOrderField>(_updateOrderField);
   }
 
   Future<void> _fetch(
@@ -324,15 +345,12 @@ class OrderDetailBloc extends Bloc<OrderDetailEvent, OrderDetailState> {
           'accept': '*/*',
         },
       );
-      log(name: 'response', response.body.toString());
-      log(name: 'GetOrderDetails', uri.toString());
       log('Response [${response.statusCode}]', name: 'OrderDetailBloc');
+      log(uri.toString(), name: EndPoint.getOrderDetails.toString());
 
       if (response.statusCode == 200) {
-        log(name: 'GetOrderDetails', uri.toString());
         final json = jsonDecode(response.body) as Map<String, dynamic>;
         if (json['status'] == true) {
-          // Response shape: { status, result: { result: {...}, ... } }
           final inner = json['result']['result'] as Map<String, dynamic>;
           emit(OrderDetailLoaded(OrderDetailMaster.fromJson(inner)));
         } else {
@@ -346,4 +364,384 @@ class OrderDetailBloc extends Bloc<OrderDetailEvent, OrderDetailState> {
       emit(OrderDetailError(e.toString()));
     }
   }
+
+  void _toggleEditMode(ToggleEditMode event, Emitter<OrderDetailState> emit) {
+    if (state is OrderDetailLoaded) {
+      final current = state as OrderDetailLoaded;
+      emit(
+        OrderDetailLoaded(
+          current.order,
+          isEditing: event.isEditing,
+          editedFields: event.isEditing ? {} : current.editedFields,
+        ),
+      );
+    }
+  }
+
+  void _updateOrderField(
+    UpdateOrderField event,
+    Emitter<OrderDetailState> emit,
+  ) {
+    if (state is OrderDetailLoaded) {
+      final current = state as OrderDetailLoaded;
+      final updatedFields = Map<String, String>.from(current.editedFields);
+      updatedFields[event.fieldKey] = event.value;
+      emit(
+        OrderDetailLoaded(
+          current.order,
+          isEditing: current.isEditing,
+          editedFields: updatedFields,
+        ),
+      );
+    }
+  }
 }
+// // lib/bloc/order/order_detail_provider.dart
+
+// import 'dart:convert';
+// import 'dart:developer';
+
+// import 'package:flutter_bloc/flutter_bloc.dart';
+// import 'package:http/http.dart' as http;
+// import 'package:marketing/constants/api_values.dart';
+// import 'package:marketing/services/provider/current_user.dart';
+
+// class OrderDetailItem {
+//   final int id;
+//   final int orderId;
+//   final int productId;
+//   final String? productDesc;
+//   final int unitId;
+//   final int unitQty;
+//   final double unitPrice;
+//   final double discountAmt;
+//   final double vat;
+//   final double netAmount;
+//   final int branchId;
+//   final int compId;
+//   final int uniqueQty;
+//   final int productTypeId;
+//   final int sizeId;
+//   final String? remarks;
+//   final String? custRef;
+
+//   // === NEW FIELDS (All Nullable for backward compatibility) ===
+//   final int? pcsQty;
+//   final double? discount;
+//   final double? factor;
+//   final double? boxConv;
+//   final double? uniquePrice;
+//   final double? forfeiture;
+//   final int? rdId;
+//   final String? tQty;
+//   final int? orderType; // in details
+
+//   const OrderDetailItem({
+//     required this.id,
+//     required this.orderId,
+//     required this.productId,
+//     this.productDesc,
+//     required this.unitId,
+//     required this.unitQty,
+//     required this.unitPrice,
+//     required this.discountAmt,
+//     required this.vat,
+//     required this.netAmount,
+//     required this.branchId,
+//     required this.compId,
+//     required this.uniqueQty,
+//     required this.productTypeId,
+//     required this.sizeId,
+//     this.remarks,
+//     this.custRef,
+
+//     // New fields
+//     this.pcsQty,
+//     this.discount,
+//     this.factor,
+//     this.boxConv,
+//     this.uniquePrice,
+//     this.forfeiture,
+//     this.rdId,
+//     this.tQty,
+//     this.orderType,
+//   });
+
+//   factory OrderDetailItem.fromJson(Map<String, dynamic> j) => OrderDetailItem(
+//     id: j['id'] ?? 0,
+//     orderId: j['orderId'] ?? 0,
+//     productId: j['productId'] ?? 0,
+//     productDesc: j['productDesc'],
+//     unitId: j['unitId'] ?? 0,
+//     unitQty: (j['unitQty'] ?? 0).toInt(),
+//     unitPrice: (j['unitPrice'] ?? 0).toDouble(),
+//     discountAmt: (j['discountAmt'] ?? 0).toDouble(),
+//     vat: (j['vat'] ?? 0).toDouble(),
+//     netAmount: (j['netAmount'] ?? 0).toDouble(),
+//     branchId: j['branchId'] ?? 0,
+//     compId: j['compId'] ?? 0,
+//     uniqueQty: (j['uniqueQty'] ?? 0).toInt(),
+//     productTypeId: j['productTypeId'] ?? 0,
+//     sizeId: j['sizeId'] ?? 0,
+//     remarks: j['remarks'],
+//     custRef: j['custRef'],
+
+//     // New fields parsing
+//     pcsQty: (j['pcsQty'] as num?)?.toInt(),
+//     discount: (j['discount'] as num?)?.toDouble(),
+//     factor: (j['factor'] as num?)?.toDouble(),
+//     boxConv: (j['boxConv'] as num?)?.toDouble(),
+//     uniquePrice: (j['uniquePrice'] as num?)?.toDouble(),
+//     forfeiture: (j['forfeiture'] as num?)?.toDouble(),
+//     rdId: (j['rdId'] as num?)?.toInt(),
+//     tQty: j['tQty']?.toString(),
+//     orderType: (j['orderType'] as num?)?.toInt(),
+//   );
+// }
+// // ─── Master Model ─────────────────────────────────────────────────────────────
+
+// class OrderDetailMaster {
+//   final int id;
+//   final int orderId;
+//   final String orderNo;
+//   final int partyId;
+//   final String? partyName;
+//   final String orderDate;
+//   final int orderType;
+//   final double paidAmount;
+//   final double netPayable;
+//   final double netAmount;
+//   final double discountAmount;
+//   final double discountRate;
+//   final double vatAmount;
+//   final double vatRate;
+//   final double otherAddition;
+//   final double otherDeduction;
+//   final double deposite;
+//   final double currencyRate;
+//   final int status;
+//   final String? statusName;
+//   final String? billTo;
+//   final String? billAddress;
+//   final String? billContactNo;
+//   final String? paymentType;
+//   final String? narration;
+//   final String? refNo;
+//   final int branchId;
+//   final int compId;
+//   final List<OrderDetailItem> details;
+
+//   // === NEW FIELDS (Nullable) ===
+//   final String? chequeDate;
+//   final double? creditLimit;
+//   final double? balance;
+//   final int? bankId;
+//   final int? userId;
+//   final String? checkedNarration;
+//   final String? rejectedNarration;
+//   final String? verifiedNarration;
+//   final String? managementNarration;
+//   final String? base64File;
+
+//   const OrderDetailMaster({
+//     required this.id,
+//     required this.orderId,
+//     required this.orderNo,
+//     required this.partyId,
+//     this.partyName,
+//     required this.orderDate,
+//     required this.orderType,
+//     required this.paidAmount,
+//     required this.netPayable,
+//     required this.netAmount,
+//     required this.discountAmount,
+//     required this.discountRate,
+//     required this.vatAmount,
+//     required this.vatRate,
+//     required this.otherAddition,
+//     required this.otherDeduction,
+//     required this.deposite,
+//     required this.currencyRate,
+//     required this.status,
+//     this.statusName,
+//     this.billTo,
+//     this.billAddress,
+//     this.billContactNo,
+//     this.paymentType,
+//     this.narration,
+//     this.refNo,
+//     required this.branchId,
+//     required this.compId,
+//     required this.details,
+
+//     // New fields
+//     this.chequeDate,
+//     this.creditLimit,
+//     this.balance,
+//     this.bankId,
+//     this.userId,
+//     this.checkedNarration,
+//     this.rejectedNarration,
+//     this.verifiedNarration,
+//     this.managementNarration,
+//     this.base64File,
+//   });
+
+//   factory OrderDetailMaster.fromJson(Map<String, dynamic> j) {
+//     final rawDetails = j['details'] as List? ?? [];
+//     return OrderDetailMaster(
+//       id: j['id'] ?? 0,
+//       orderId: j['orderId'] ?? 0,
+//       orderNo: j['orderNo'] ?? '',
+//       partyId: j['partyId'] ?? 0,
+//       partyName: j['partyName'],
+//       orderDate: j['orderDate']?.toString() ?? '',
+//       orderType: j['orderType'] ?? 0,
+//       paidAmount: (j['paidAmount'] ?? 0).toDouble(),
+//       netPayable: (j['netPayable'] ?? 0).toDouble(),
+//       netAmount: (j['netAmount'] ?? 0).toDouble(),
+//       discountAmount: (j['discountAmount'] ?? 0).toDouble(),
+//       discountRate: (j['discountRate'] ?? 0).toDouble(),
+//       vatAmount: (j['vatAmount'] ?? 0).toDouble(),
+//       vatRate: (j['vatRate'] ?? 0).toDouble(),
+//       otherAddition: (j['otherAddition'] ?? 0).toDouble(),
+//       otherDeduction: (j['otherDeduction'] ?? 0).toDouble(),
+//       deposite: (j['deposite'] ?? 0).toDouble(),
+//       currencyRate: (j['currencyRate'] ?? 0).toDouble(),
+//       status: j['status'] ?? 0,
+//       statusName: j['statusName'],
+//       billTo: j['billTo'],
+//       billAddress: j['billAddress'],
+//       billContactNo: j['billContactNo'],
+//       paymentType: j['paymentType'],
+//       narration: j['narration'],
+//       refNo: j['refNo'],
+//       branchId: j['branchId'] ?? 0,
+//       compId: j['compId'] ?? 0,
+//       details: rawDetails
+//           .map((e) => OrderDetailItem.fromJson(e as Map<String, dynamic>))
+//           .toList(),
+
+//       // New fields
+//       chequeDate: j['chequeDate']?.toString(),
+//       creditLimit: (j['creditLimit'] as num?)?.toDouble(),
+//       balance: (j['balance'] as num?)?.toDouble(),
+//       bankId: (j['bankId'] as num?)?.toInt(),
+//       userId: (j['userId'] as num?)?.toInt(),
+//       checkedNarration: j['checkedNarration'],
+//       rejectedNarration: j['rejectedNarration'],
+//       verifiedNarration: j['verifiedNarration'],
+//       managementNarration: j['managementNarration'],
+//       base64File: j['base64File'],
+//     );
+//   }
+
+//   String get formattedDate {
+//     // ... your existing code (unchanged)
+//     const months = [
+//       '',
+//       'Jan',
+//       'Feb',
+//       'Mar',
+//       'Apr',
+//       'May',
+//       'Jun',
+//       'Jul',
+//       'Aug',
+//       'Sep',
+//       'Oct',
+//       'Nov',
+//       'Dec',
+//     ];
+//     try {
+//       final digits = orderDate.replaceAll(RegExp(r'[^0-9]'), '');
+//       if (digits.length < 8) return orderDate;
+//       final y = digits.substring(0, 4);
+//       final m = int.tryParse(digits.substring(4, 6)) ?? 1;
+//       final d = digits.substring(6, 8);
+//       return '$d ${months[m]} $y';
+//     } catch (_) {
+//       return orderDate;
+//     }
+//   }
+// }
+
+// // ─── Events ───────────────────────────────────────────────────────────────────
+
+// abstract class OrderDetailEvent {}
+
+// class LoadOrderDetail extends OrderDetailEvent {
+//   final int id;
+//   LoadOrderDetail(this.id);
+// }
+
+// // ─── States ───────────────────────────────────────────────────────────────────
+
+// abstract class OrderDetailState {}
+
+// class OrderDetailInitial extends OrderDetailState {}
+
+// class OrderDetailLoading extends OrderDetailState {}
+
+// class OrderDetailLoaded extends OrderDetailState {
+//   final OrderDetailMaster order;
+//   OrderDetailLoaded(this.order);
+// }
+
+// class OrderDetailError extends OrderDetailState {
+//   final String message;
+//   OrderDetailError(this.message);
+// }
+
+// // ─── BLoC ─────────────────────────────────────────────────────────────────────
+// class OrderDetailBloc extends Bloc<OrderDetailEvent, OrderDetailState> {
+//   static const _base =
+//       '${BaseUrl.apiBase}/api/${V.v1}/${EndPoint.getOrderDetails}';
+
+//   OrderDetailBloc() : super(OrderDetailInitial()) {
+//     on<LoadOrderDetail>(_fetch);
+//   }
+
+//   Future<void> _fetch(
+//     LoadOrderDetail event,
+//     Emitter<OrderDetailState> emit,
+//   ) async {
+//     emit(OrderDetailLoading());
+//     try {
+//       final uri = Uri.parse(
+//         '$_base?id=${event.id}&compId=${CurrentUser.compId}',
+//       );
+
+//       log('Fetching detail | id=${event.id}', name: 'OrderDetailBloc');
+
+//       final response = await http.get(
+//         uri,
+//         headers: {
+//           'Authorization': 'Bearer ${CurrentUser.token}',
+//           'Content-Type': 'application/json',
+//           'accept': '*/*',
+//         },
+//       );
+//       log(name: 'response', response.body.toString());
+//       log(name: 'GetOrderDetails', uri.toString());
+//       log('Response [${response.statusCode}]', name: 'OrderDetailBloc');
+
+//       if (response.statusCode == 200) {
+//         log(name: 'GetOrderDetails', uri.toString());
+//         final json = jsonDecode(response.body) as Map<String, dynamic>;
+//         if (json['status'] == true) {
+//           // Response shape: { status, result: { result: {...}, ... } }
+//           final inner = json['result']['result'] as Map<String, dynamic>;
+//           emit(OrderDetailLoaded(OrderDetailMaster.fromJson(inner)));
+//         } else {
+//           emit(OrderDetailError('Server returned status false'));
+//         }
+//       } else {
+//         emit(OrderDetailError('Failed [${response.statusCode}]'));
+//       }
+//     } catch (e) {
+//       log('Error: $e', name: 'OrderDetailBloc');
+//       emit(OrderDetailError(e.toString()));
+//     }
+//   }
+// }

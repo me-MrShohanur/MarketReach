@@ -2,6 +2,7 @@
 
 import 'dart:convert';
 import 'dart:developer' as dev;
+import 'dart:developer';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:marketing/constants/api_values.dart';
@@ -41,7 +42,6 @@ class OrderSaveService {
   static void _log(String msg, {String name = 'OrderSave'}) =>
       dev.log(msg, name: name, level: 800);
 
-  // Pretty-prints any Map or List as indented JSON in a single log entry
   static void _logJson(String label, Object json, {String name = 'OrderSave'}) {
     final pretty = _encoder.convert(json);
     dev.log('\n$label\n$pretty', name: name, level: 800);
@@ -57,6 +57,7 @@ class OrderSaveService {
     String? shippingAddress,
     String? shippingContact,
     required double netAmount,
+    int? orderId, // ← NEW: Accept orderId for updates
   }) async {
     // ── Dates ─────────────────────────────────────────────────────────────
     final now = DateTime.now();
@@ -65,11 +66,7 @@ class OrderSaveService {
         ? _formatDate(chequeDate)
         : _formatDate(now);
 
-    // ── Totals ────────────────────────────────────────────────────────────
-    // final double subtotal = cart.fold(0.0, (s, p) => s + p.cartNetAmount);
-    // final double netAmount = subtotal - discount;
     final double vatAmount = tax;
-    // final double netPayable = netAmount + vatAmount;
 
     // ── Master ────────────────────────────────────────────────────────────
     final Map<String, dynamic> master = {
@@ -80,7 +77,7 @@ class OrderSaveService {
       'orderType': 7,
       'orderDate': orderDate,
       'chequeDate': chequeDateValue,
-      'orderId': 0,
+      'orderId': orderId ?? 0, // ← Use passed orderId or 0 for new order
       'quoteId': 0,
       'status': 0,
       'netAmount': netAmount,
@@ -129,14 +126,14 @@ class OrderSaveService {
 
     // ── Details ───────────────────────────────────────────────────────────
     final List<Map<String, dynamic>> details = cart
-        .map((p) => _buildDetail(p))
+        .map((p) => _buildDetail(p, orderId: orderId ?? 0)) // ← Pass orderId
         .toList();
 
     // ── Full body ─────────────────────────────────────────────────────────
     final Map<String, dynamic> body = {'master': master, 'details': details};
 
     final uri = Uri.parse('${BaseUrl.apiBase}/api/${V.v1}/${EndPoint.save}');
-    final String jsonBody = jsonEncode(body); // compact — for the HTTP call
+    final String jsonBody = jsonEncode(body);
 
     // ═══════════════════════════════════════════════════════════════════════
     // PRETTY REQUEST LOG
@@ -147,6 +144,7 @@ class OrderSaveService {
     _log('╚════════════════════════════════════════╝');
     _log('URL   : $uri');
     _log('Token : Bearer ${CurrentUser.token}');
+    _log('Order ID being sent: ${orderId ?? 0}');
     _log('');
 
     // Master — pretty JSON
@@ -202,6 +200,8 @@ class OrderSaveService {
       _log('════════════════════════════════════════');
 
       if (response.statusCode == 200) {
+        log(name: 'Saving DONE', master.toString());
+        log(name: 'Saving DONE', details.toString());
         final jsonMap = jsonDecode(response.body) as Map<String, dynamic>;
         final result = OrderSaveResponse.fromJson(jsonMap);
         if (!result.status) {
@@ -249,9 +249,9 @@ class OrderSaveService {
   }
 
   // ── Build a single detail row ─────────────────────────────────────────────
-  static Map<String, dynamic> _buildDetail(ProductModel p) => {
+  static Map<String, dynamic> _buildDetail(ProductModel p, {int? orderId}) => {
     'id': p.productId,
-    'orderId': 0,
+    'orderId': orderId ?? 0, // ← Use passed orderId or 0
     'productId': p.productId,
     'productDesc': p.name,
     'productTypeId': 0,
@@ -278,7 +278,6 @@ class OrderSaveService {
     'remarks': p.cartNotes.isEmpty ? '' : p.cartNotes,
   };
 }
-
 //-----------------
 
 // import 'dart:convert';
