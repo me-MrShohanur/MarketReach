@@ -305,7 +305,6 @@ class _Header extends StatelessWidget {
     log('Order ID: ${order.orderId}');
     log('Order No: ${order.orderNo}');
     log('Details count: ${order.details.length}');
-
     // ─── Log all detail IDs before saving ────────────────────────────────────
     for (int i = 0; i < order.details.length; i++) {
       final d = order.details[i];
